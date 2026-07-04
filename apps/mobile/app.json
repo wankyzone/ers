@@ -1,0 +1,45 @@
+{
+  "expo": {
+    "name": "ers-mobile",
+    "slug": "ers-mobile",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.wanky.ersmobile"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#ffffff"
+      },
+      "edgeToEdgeEnabled": true,
+      "predictiveBackGestureEnabled": false,
+      "package": "com.wanky.ersmobile"
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-secure-store",
+      "expo-web-browser",
+      "@rnmapbox/maps"
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "3f42dc81-a73b-4dee-97b8-f58ae8019649"
+      }
+    },
+    "updates": {
+      "enabled": false
+    }
+  }
+}

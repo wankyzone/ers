@@ -1,0 +1,7 @@
+// config/limits.ts
+export const LIMITS = {
+  MAX_PER_TRANSACTION: 100000,
+  DAILY_LIMIT: 300000,
+  MAX_ATTEMPTS: 3,
+  COOLDOWN_MINUTES: 15,
+};

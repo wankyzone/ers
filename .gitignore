@@ -1,0 +1,34 @@
+# dependencies
+node_modules
+
+# Expo
+.expo
+
+# Android
+android/.gradle
+
+# iOS
+ios/build
+
+# Logs
+*.log
+
+# Environment
+.env
+.env.*
+
+# Turbo
+.turbo
+
+# macOS
+.DS_Store
+
+# IDE
+.vscode
+.idea
+
+# build
+dist
+build
+
+coverage

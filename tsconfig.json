@@ -1,0 +1,10 @@
+{
+  "files": [],
+  "references": [
+    { "path": "packages/backend" },
+    { "path": "apps/admin" },
+    { "path": "packages/@ers/redis" },
+    { "path": "packages/@ers/dispatch" },
+    { "path": "packages/@ers/orchestrator" }
+  ]
+}

@@ -1,0 +1,19 @@
+{
+  "compilerOptions": {
+    "target": "ESNEXT",
+    "module": "ESNEXT",
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "strict": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "moduleResolution": "node",
+    "baseUrl": ".",
+    "paths": {
+      "@ers/db": ["packages/db/src"],
+      "@ers/db/*": ["packages/db/src/*"],
+      "@ers/auth": ["apps/auth/src"],
+      "@ers/auth/*": ["apps/auth/src/*"]
+    }
+  }
+}
