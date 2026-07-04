@@ -151,6 +151,18 @@ importers:
         specifier: ^8.62.0
         version: 8.62.1(eslint@9.39.4(jiti@1.21.7))(typescript@5.9.3)
 
+  packages/auth: {}
+
+  packages/config: {}
+
+  packages/db: {}
+
+  packages/types: {}
+
+  packages/ui: {}
+
+  packages/utils: {}
+
   services/api:
     dependencies:
       '@supabase/supabase-js':
