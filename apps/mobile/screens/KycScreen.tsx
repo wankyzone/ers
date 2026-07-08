@@ -190,8 +190,11 @@ export default function KycScreen({ navigation, route }: Props) {
           };
         };
 
-        if (res.ok && response.status){
-          setForm(prev => ({ ...prev, account_name: response.data?.account_name }));
+        if (res.ok && response.status) {
+          setForm(prev => ({
+            ...prev,
+            account_name: response.data?.account_name ?? '',
+          }));
         } else {
           setResolveError('Invalid account details');
         }

@@ -87,16 +87,41 @@
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL ?? '';
 
-type ApiResponse = {
+type ApiMessageResponse = {
   message?: string;
   error?: string;
   status?: boolean;
   success?: boolean;
-  data?: any;
-  balance?: number;
-  available_balance?: number;
+};
+
+type WalletResponse = ApiMessageResponse & {
+  balance?: number | string;
+  available_balance?: number | string;
+};
+
+type BankAccountsResponse = ApiMessageResponse & {
   accounts?: BankAccount[];
-  [key: string]: any;
+};
+
+type WithdrawResponse = ApiMessageResponse & {
+  requireOtp?: boolean;
+};
+
+type PaystackRecipient = {
+  recipient_code: string;
+};
+
+type PaystackRecipientResponse = ApiMessageResponse & {
+  data?: PaystackRecipient;
+  recipient_code?: string;
+};
+
+const apiMessage = (
+  data: ApiMessageResponse | string | null,
+  fallback: string
+): string => {
+  if (typeof data === 'string') return data || fallback;
+  return data?.message ?? data?.error ?? fallback;
 };
 
 // Module-level user reference — set by AuthContext after login
@@ -222,8 +247,16 @@ export type BankAccount = {
  */
 export async function apiFetch(
   path: string,
+  options?: RequestInit & { headers?: Record<string, string> }
+): Promise<{ data: ApiMessageResponse | string | null; res: Response }>;
+export async function apiFetch<TData>(
+  path: string,
+  options?: RequestInit & { headers?: Record<string, string> }
+): Promise<{ data: TData; res: Response }>;
+export async function apiFetch<TData = ApiMessageResponse | string | null>(
+  path: string,
   options: RequestInit & { headers?: Record<string, string> } = {}
-): Promise<{ data: unknown; res: Response }> {
+): Promise<{ data: TData; res: Response }> {
   const res = await fetch(`${API_URL}${path}`, {
     ...options,
     headers: {
@@ -240,11 +273,11 @@ export async function apiFetch(
   });
 
   const text = await res.text();
-  let data: ApiResponse | ApiResponse[] | string;
+  let data: TData;
   try {
-    data = JSON.parse(text);
+    data = text ? (JSON.parse(text) as TData) : (null as TData);
   } catch {
-    data = text;
+    data = text as TData;
   }
 
   return { data, res };
@@ -262,8 +295,8 @@ export async function apiFetch(
  * Fixed: hit GET /api/errands with role already set in apiFetch headers.
  */
 export const getClientErrands = async (): Promise<Errand[]> => {
-  const { data, res } = await apiFetch('/api/errands');
-  if (!res.ok) throw new Error(data?.message ?? 'Failed to load errands');
+  const { data, res } = await apiFetch<Errand[] | ApiMessageResponse>('/api/errands');
+  if (!res.ok) throw new Error(apiMessage(data as ApiMessageResponse, 'Failed to load errands'));
   return Array.isArray(data) ? data : [];
 };
 
@@ -286,7 +319,7 @@ export const createErrand = async (payload: {
   delivery_location?: string;
   price: number;           // backend field — not `budget`
 }): Promise<Errand> => {
-  const { data, res } = await apiFetch('/api/errands', {
+  const { data, res } = await apiFetch<Errand & ApiMessageResponse>('/api/errands', {
     method: 'POST',
     // Backend reads x-client-id — must be explicit because apiFetch
     // only injects x-user-id, x-role, x-runner-id
@@ -295,7 +328,7 @@ export const createErrand = async (payload: {
     },
     body: JSON.stringify(payload),
   });
-  if (!res.ok) throw new Error(data?.message ?? data?.error ?? 'Failed to create errand');
+  if (!res.ok) throw new Error(apiMessage(data, 'Failed to create errand'));
   return data;
 };
 
@@ -307,12 +340,12 @@ export const createErrand = async (payload: {
  * Releases escrow to runner and logs a 'release' transaction.
  */
 export const confirmErrand = async (id: string): Promise<{ success: boolean }> => {
-  const { data, res } = await apiFetch(`/api/errands/${id}/confirm`, {
+  const { data, res } = await apiFetch<{ success: boolean } & ApiMessageResponse>(`/api/errands/${id}/confirm`, {
     method: 'POST',
   });
 
   if (!res.ok) {
-    throw new Error(data?.message ?? data?.error ?? 'Failed to confirm errand');
+    throw new Error(apiMessage(data, 'Failed to confirm errand'));
   }
 
   return data;
@@ -330,8 +363,8 @@ export const confirmErrand = async (id: string): Promise<{ success: boolean }> =
  * Fixed: same GET /api/errands route, role header determines the filter.
  */
 export const getOpenErrands = async (): Promise<Errand[]> => {
-  const { data, res } = await apiFetch('/api/errands');
-  if (!res.ok) throw new Error(data?.message ?? 'Failed to load errands');
+  const { data, res } = await apiFetch<Errand[] | ApiMessageResponse>('/api/errands');
+  if (!res.ok) throw new Error(apiMessage(data as ApiMessageResponse, 'Failed to load errands'));
   return Array.isArray(data) ? data : [];
 };
 
@@ -343,10 +376,10 @@ export const getOpenErrands = async (): Promise<Errand[]> => {
  * Updates errand status to 'accepted', sets assigned_runner_id.
  */
 export const acceptErrand = async (id: string): Promise<Errand> => {
-  const { data, res } = await apiFetch(`/api/errands/${id}/accept`, {
+  const { data, res } = await apiFetch<Errand & ApiMessageResponse>(`/api/errands/${id}/accept`, {
     method: 'POST',
   });
-  if (!res.ok) throw new Error(data?.message ?? data?.error ?? 'Failed to accept errand');
+  if (!res.ok) throw new Error(apiMessage(data, 'Failed to accept errand'));
   return data;
 };
 
@@ -358,10 +391,10 @@ export const acceptErrand = async (id: string): Promise<Errand> => {
  * Updates errand status to 'completed', escrow_status to 'awaiting_confirmation'.
  */
 export const completeErrand = async (id: string): Promise<Errand> => {
-  const { data, res } = await apiFetch(`/api/errands/${id}/complete`, {
+  const { data, res } = await apiFetch<Errand & ApiMessageResponse>(`/api/errands/${id}/complete`, {
     method: 'POST',
   });
-  if (!res.ok) throw new Error(data?.message ?? data?.error ?? 'Failed to complete errand');
+  if (!res.ok) throw new Error(apiMessage(data, 'Failed to complete errand'));
   return data;
 };
 
@@ -378,8 +411,8 @@ export const completeErrand = async (id: string): Promise<Errand> => {
  * Requires userId to be passed by the caller (read from useAuth().user.id).
  */
 export const getTransactions = async (userId: string): Promise<Transaction[]> => {
-  const { data, res } = await apiFetch(`/api/transactions/${userId}`);
-  if (!res.ok) throw new Error(data?.message ?? 'Failed to load transactions');
+  const { data, res } = await apiFetch<Transaction[] | ApiMessageResponse>(`/api/transactions/${userId}`);
+  if (!res.ok) throw new Error(apiMessage(data as ApiMessageResponse, 'Failed to load transactions'));
   return Array.isArray(data) ? data : [];
 };
 
@@ -393,11 +426,11 @@ export const getTransactions = async (userId: string): Promise<Transaction[]> =>
  * Returns: { balance, available_balance, escrow_balance, ... }
  */
 export const getWallet = async (): Promise<{ balance: number; available_balance: number }> => {
-  const { data, res } = await apiFetch('/api/wallet');
-  if (!res.ok) throw new Error(data?.message ?? data?.error ?? 'Failed to load wallet');
+  const { data, res } = await apiFetch<WalletResponse>('/api/wallet');
+  if (!res.ok) throw new Error(apiMessage(data, 'Failed to load wallet'));
   return {
-    balance: Number(data?.balance) || 0,
-    available_balance: Number(data?.available_balance) || 0,
+    balance: Number(data.balance) || 0,
+    available_balance: Number(data.available_balance) || 0,
   };
 };
 
@@ -425,11 +458,11 @@ export const withdrawWithPin = async (
   amount: number,
   pin: string
 ): Promise<{ requireOtp?: boolean; message?: string; success?: boolean }> => {
-  const { data, res } = await apiFetch('/api/withdraw', {
+  const { data, res } = await apiFetch<WithdrawResponse>('/api/withdraw', {
     method: 'POST',
     body: JSON.stringify({ amount, pin }),
   });
-  if (!res.ok) throw new Error(data?.message ?? 'Withdrawal failed');
+  if (!res.ok) throw new Error(apiMessage(data, 'Withdrawal failed'));
   return data;
 };
 
@@ -446,14 +479,14 @@ export const withdrawWithPin = async (
  * Expected: GET /api/bank-accounts
  */
 export const getUserBanks = async (): Promise<BankAccount[]> => {
-  const { data, res } = await apiFetch('/api/bank-accounts');
+  const { data, res } = await apiFetch<BankAccount[] | BankAccountsResponse>('/api/bank-accounts');
   if (!res.ok) {
     // Return empty array rather than throwing so WalletScreen degrades
     // gracefully (shows "No default bank set") instead of crashing.
     console.warn('[api] getUserBanks: backend route not implemented yet');
     return [];
   }
-  return Array.isArray(data) ? data : (data?.accounts ?? []);
+  return Array.isArray(data) ? data : (data.accounts ?? []);
 };
 
 /**
@@ -461,10 +494,10 @@ export const getUserBanks = async (): Promise<BankAccount[]> => {
  * Expected: PATCH /api/bank-accounts/:id/default
  */
 export const setDefaultBank = async (id: string): Promise<void> => {
-  const { data, res } = await apiFetch(`/api/bank-accounts/${id}/default`, {
+  const { data, res } = await apiFetch<ApiMessageResponse>(`/api/bank-accounts/${id}/default`, {
     method: 'PATCH',
   });
-  if (!res.ok) throw new Error(data?.message ?? 'Failed to set default bank');
+  if (!res.ok) throw new Error(apiMessage(data, 'Failed to set default bank'));
 };
 
 /**
@@ -472,10 +505,10 @@ export const setDefaultBank = async (id: string): Promise<void> => {
  * Expected: DELETE /api/bank-accounts/:id
  */
 export const deleteBank = async (id: string): Promise<void> => {
-  const { data, res } = await apiFetch(`/api/bank-accounts/${id}`, {
+  const { data, res } = await apiFetch<ApiMessageResponse>(`/api/bank-accounts/${id}`, {
     method: 'DELETE',
   });
-  if (!res.ok) throw new Error(data?.message ?? 'Failed to delete bank');
+  if (!res.ok) throw new Error(apiMessage(data, 'Failed to delete bank'));
 };
 
 /**
@@ -494,11 +527,11 @@ export const addBankAccount = async (payload: {
   account_number: string;
   account_name: string;
 }): Promise<BankAccount> => {
-  const { data, res } = await apiFetch('/api/bank-accounts', {
+  const { data, res } = await apiFetch<BankAccount & ApiMessageResponse>('/api/bank-accounts', {
     method: 'POST',
     body: JSON.stringify(payload),
   });
-  if (!res.ok) throw new Error(data?.message ?? 'Failed to add bank account');
+  if (!res.ok) throw new Error(apiMessage(data, 'Failed to add bank account'));
   return data;
 };
 
@@ -514,11 +547,11 @@ export const createPaystackRecipient = async (payload: {
   account_number: string;
   bank_code: string;
   name: string;
-}): Promise<{ recipient_code: string; [key: string]: unknown }> => {
-  const { data, res } = await apiFetch('/api/paystack/create-recipient', {
+}): Promise<PaystackRecipient> => {
+  const { data, res } = await apiFetch<PaystackRecipientResponse>('/api/paystack/create-recipient', {
     method: 'POST',
     body: JSON.stringify(payload),
   });
-  if (!res.ok) throw new Error(data?.message ?? 'Failed to create recipient');
-  return data?.data ?? data;
+  if (!res.ok) throw new Error(apiMessage(data, 'Failed to create recipient'));
+  return data.data ?? { recipient_code: data.recipient_code ?? '' };
 };

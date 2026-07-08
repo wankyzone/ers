@@ -11,32 +11,19 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-
+import BottomSheet, {
+  BottomSheetScrollView,
+} from '@gorhom/bottom-sheet';
+import * as Location from 'expo-location';
+import { useNavigation } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import MapView, { Marker, type LatLng, type MapPressEvent, type Region } from 'react-native-maps';
 import {
   GestureHandlerRootView,
 } from 'react-native-gesture-handler';
 
-import BottomSheet, {
-  BottomSheetScrollView,
-} from '@gorhom/bottom-sheet';
-
-import * as Location from 'expo-location';
-import { useNavigation } from '@react-navigation/native';
-import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-
 import type { RootStackParamList } from '../src/navigation';
 import { createErrand, type ApiError } from '../src/services/api';
-
-// ─── SAFE MAP IMPORT ─────────────────────────
-
-let MapView: any = null;
-let Marker: any = null;
-
-if (Platform.OS !== 'web') {
-  import Maps from 'react-native-maps';
-  MapView = Maps.default;
-  Marker = Maps.Marker;
-}
 
 // ─── TYPES ─────────────────────────
 
@@ -44,14 +31,9 @@ type NavProp = NativeStackNavigationProp<RootStackParamList>;
 
 type MapTarget = 'pickup' | 'delivery' | null;
 
-interface LatLng {
-  latitude: number;
-  longitude: number;
-}
-
 // ─── DEFAULT REGION ─────────────────
 
-const DEFAULT_REGION = {
+const DEFAULT_REGION: Region = {
   latitude: 6.5244,
   longitude: 3.3792,
   latitudeDelta: 0.05,
@@ -86,7 +68,7 @@ export default function CreateErrandScreen() {
 
   // ─── MAP HANDLERS ─────────────────
 
-  const handleMapPress = (e: any) => {
+  const handleMapPress = (e: MapPressEvent) => {
     setPin(e.nativeEvent.coordinate);
   };
 
@@ -168,7 +150,7 @@ export default function CreateErrandScreen() {
         <Modal visible={mapTarget !== null} animationType="slide">
           <View style={{ flex: 1 }}>
 
-            {Platform.OS !== 'web' && MapView ? (
+            {Platform.OS !== 'web' ? (
               <MapView
                 style={{ flex: 1 }}
                 initialRegion={DEFAULT_REGION}
