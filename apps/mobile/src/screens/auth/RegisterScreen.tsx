@@ -3,11 +3,9 @@ import {
   Alert,
   KeyboardAvoidingView,
   Platform,
-  Pressable,
   SafeAreaView,
   ScrollView,
   StyleSheet,
-  Text,
   View,
 } from 'react-native';
 import { emailSchema, passwordSchema } from '@ers/auth';
@@ -21,24 +19,27 @@ import LoadingOverlay from '../../components/auth/LoadingOverlay';
 import { useAuth } from '../../hooks/useAuth';
 import type { AuthStackParamList } from '../../navigation/AuthStack';
 
-type Props = NativeStackScreenProps<AuthStackParamList, 'Login'>;
+type Props = NativeStackScreenProps<AuthStackParamList, 'Register'>;
 
-interface LoginErrors {
+interface RegisterErrors {
   email?: string;
   password?: string;
+  confirmPassword?: string;
 }
 
-export default function LoginScreen({ navigation }: Props) {
-  const { signIn } = useAuth();
+export default function RegisterScreen({ navigation, route }: Props) {
+  const { signUp } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [errors, setErrors] = useState<LoginErrors>({});
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [errors, setErrors] = useState<RegisterErrors>({});
   const [loading, setLoading] = useState(false);
+  const method = route.params?.method ?? 'email';
 
   const normalizedEmail = email.trim().toLowerCase();
 
   const validate = () => {
-    const nextErrors: LoginErrors = {};
+    const nextErrors: RegisterErrors = {};
     const emailResult = emailSchema.safeParse(normalizedEmail);
     const passwordResult = passwordSchema.safeParse(password);
 
@@ -50,6 +51,10 @@ export default function LoginScreen({ navigation }: Props) {
       nextErrors.password = 'Password must be at least 8 characters.';
     }
 
+    if (confirmPassword !== password) {
+      nextErrors.confirmPassword = 'Passwords do not match.';
+    }
+
     setErrors(nextErrors);
     return Object.keys(nextErrors).length === 0;
   };
@@ -59,10 +64,11 @@ export default function LoginScreen({ navigation }: Props) {
 
     setLoading(true);
     try {
-      await signIn(normalizedEmail, password);
+      await signUp(normalizedEmail, password);
+      navigation.navigate('VerifyOTP', { email: normalizedEmail });
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unable to sign in.';
-      Alert.alert('Sign in failed', message);
+      const message = error instanceof Error ? error.message : 'Unable to create account.';
+      Alert.alert('Registration failed', message);
     } finally {
       setLoading(false);
     }
@@ -79,8 +85,12 @@ export default function LoginScreen({ navigation }: Props) {
           keyboardShouldPersistTaps="handled"
         >
           <AuthHeader
-            title="Welcome back"
-            subtitle="Sign in to manage errands, deliveries, wallet activity, and runner updates."
+            title="Create your account"
+            subtitle={
+              method === 'phone'
+                ? 'Phone onboarding is almost ready. Continue with email to secure your ERS account today.'
+                : 'Start with your email and set a secure password for your ERS account.'
+            }
             onBack={navigation.goBack}
           />
 
@@ -102,36 +112,37 @@ export default function LoginScreen({ navigation }: Props) {
               value={password}
               onChangeText={setPassword}
               secureTextEntry
-              textContentType="password"
-              autoComplete="password"
+              textContentType="newPassword"
+              autoComplete="new-password"
               editable={!loading}
               error={errors.password}
             />
-
-            <Pressable
-              onPress={() => navigation.navigate('ForgotPassword')}
-              accessibilityRole="button"
-              hitSlop={10}
-              style={styles.forgotButton}
-            >
-              <Text style={styles.forgotText}>Forgot password?</Text>
-            </Pressable>
+            <AuthInput
+              label="Confirm password"
+              value={confirmPassword}
+              onChangeText={setConfirmPassword}
+              secureTextEntry
+              textContentType="newPassword"
+              autoComplete="new-password"
+              editable={!loading}
+              error={errors.confirmPassword}
+            />
 
             <AuthButton
-              title="Sign In"
+              title="Create Account"
               onPress={handleSubmit}
               loading={loading}
             />
           </View>
 
           <AuthFooter
-            prompt="New to ERS?"
-            actionLabel="Create account"
-            onPress={() => navigation.navigate('Register', { method: 'email' })}
+            prompt="Already have an account?"
+            actionLabel="Sign in"
+            onPress={() => navigation.navigate('Login')}
           />
         </ScrollView>
       </KeyboardAvoidingView>
-      <LoadingOverlay visible={loading} message="Signing you in" />
+      <LoadingOverlay visible={loading} message="Creating account" />
     </SafeAreaView>
   );
 }
@@ -153,14 +164,5 @@ const styles = StyleSheet.create({
   },
   form: {
     gap: 18,
-  },
-  forgotButton: {
-    alignSelf: 'flex-end',
-    paddingVertical: 2,
-  },
-  forgotText: {
-    color: '#16a34a',
-    fontSize: 14,
-    fontWeight: '800',
   },
 });
