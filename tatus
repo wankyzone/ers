@@ -1,0 +1,20 @@
+[1mdiff --git a/services/api/index.js b/services/api/index.js[m
+[1mindex a04181b..2daf416 100644[m
+[1m--- a/services/api/index.js[m
+[1m+++ b/services/api/index.js[m
+[36m@@ -1,13 +1,5 @@[m
+[31m-import dotenv from 'dotenv';[m
+[31m-import path from 'path';[m
+[31m-import { fileURLToPath } from 'url';[m
+[31m-[m
+[31m-const __filename = fileURLToPath(import.meta.url);[m
+[31m-const __dirname = path.dirname(__filename);[m
+[31m-[m
+[31m-dotenv.config({[m
+[31m-  path: path.resolve(__dirname, '../../.env'),[m
+[31m-});[m
+[32m+[m[32m// Must be the first import: loads env vars before any module reads process.env.[m
+[32m+[m[32mimport './env.js';[m
+ [m
+ import express from 'express';[m
+ import cors from 'cors';[m
