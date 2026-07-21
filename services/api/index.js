@@ -14,6 +14,7 @@ import pinRouter from './routes/pin.js';
 import banksRouter from './routes/banks.js';
 import otpRouter from './routes/otp.js';
 import supabase from './supabase.js';
+import adminKycRoutes from "./routes/adminKyc.js";
 
 import './jobs/escrow.js';
 
@@ -119,6 +120,7 @@ app.use('/api/kyc', kycRouter);
 app.use('/api/pin', pinRouter);
 app.use('/api/banks', banksRouter);
 app.use('/api/otp', otpRouter);
+app.use("/api/admin/kyc", adminKycRoutes);
 
 app.use((req, res) => {
   res.status(404).json({
@@ -176,6 +178,8 @@ function registeredRoutes() {
     ...listRoutes(banksRouter, '/api/banks'),
     ...listRoutes(otpRouter, '/otp'),
     ...listRoutes(otpRouter, '/api/otp'),
+    ...listRoutes(adminKycRoutes, '/admin/kyc'),
+    ...listRoutes(adminKycRoutes, '/api/admin/kyc'),
   ].sort();
 }
 
