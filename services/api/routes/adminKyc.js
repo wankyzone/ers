@@ -5,6 +5,10 @@ import {
   rejectKyc,
 } from "../services/kycService.js";
 
+import {
+  getRunnerDocuments,
+} from "../services/storageService.js";
+
 console.log("✅ adminKyc.js loaded");
 
 const router = express.Router();
@@ -21,6 +25,24 @@ router.get("/", async (req, res) => {
       success: true,
       data: result,
     });
+  } catch (error) {
+    console.error(error);
+
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+});
+
+/**
+ * GET /admin/kyc/:id/documents
+ */
+router.get("/:id/documents", async (req, res) => {
+  try {
+    const result = await getRunnerDocuments(req.params.id);
+
+    res.status(200).json(result);
   } catch (error) {
     console.error(error);
 

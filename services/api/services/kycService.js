@@ -88,6 +88,7 @@ if (userError || !user) {
 
     return {
       success: true,
+      message: 'KYC profile created successfully.',
       data,
     };
   }
@@ -111,6 +112,7 @@ if (userError || !user) {
 
   return {
     success: true,
+    message: "KYC profile updated successfully.",
     data,
   };
 }

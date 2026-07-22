@@ -15,6 +15,7 @@ import banksRouter from './routes/banks.js';
 import otpRouter from './routes/otp.js';
 import supabase from './supabase.js';
 import adminKycRoutes from "./routes/adminKyc.js";
+import storageRoutes from './routes/storage.js';
 
 import './jobs/escrow.js';
 
@@ -112,11 +113,13 @@ app.use('/kyc', kycRouter);
 app.use('/pin', pinRouter);
 app.use('/banks', banksRouter);
 app.use('/otp', otpRouter);
+app.use('/storage', storageRoutes);
 
 app.use('/api/errands', errandsRouter);
 app.use('/api/transactions', transactionsRouter);
 app.use('/api/paystack', paystackRouter);
 app.use('/api/kyc', kycRouter);
+app.use('/api/storage', storageRoutes);
 app.use('/api/pin', pinRouter);
 app.use('/api/banks', banksRouter);
 app.use('/api/otp', otpRouter);
@@ -180,6 +183,8 @@ function registeredRoutes() {
     ...listRoutes(otpRouter, '/api/otp'),
     ...listRoutes(adminKycRoutes, '/admin/kyc'),
     ...listRoutes(adminKycRoutes, '/api/admin/kyc'),
+    ...listRoutes(storageRoutes, '/storage'),
+    ...listRoutes(storageRoutes, '/api/storage'),
   ].sort();
 }
 
