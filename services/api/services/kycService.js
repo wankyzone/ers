@@ -1,19 +1,10 @@
 import supabase from '../supabase.js';
 
 export async function submitKyc(userId, payload) {
-  // Step 1: Verify the user exists
-  const { data: user, error: userError } = await supabase
-  .from('users')
-  .select('id')
-  .eq('id', userId)
-  .single();
+ // Identity has already been authenticated and resolved by Wanky Protect.
+  // Do not trust or re-resolve client-supplied identity here.
 
-if (userError || !user) {
-  return {
-    success: false,
-    message: 'User not found',
-  };
-}
+  // Step 1: Validate required fields
 
   // Step 2: Validate required fields
   if (
@@ -88,7 +79,7 @@ if (userError || !user) {
 
     return {
       success: true,
-      message: 'KYC profile created successfully.',
+      message: 'KYC profile updated successfully.',
       data,
     };
   }
@@ -112,7 +103,7 @@ if (userError || !user) {
 
   return {
     success: true,
-    message: "KYC profile updated successfully.",
+    message: 'KYC profile created successfully.',
     data,
   };
 }
