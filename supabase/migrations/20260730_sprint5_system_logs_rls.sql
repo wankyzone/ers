@@ -1,0 +1,2 @@
+ALTER TABLE public.system_logs
+ENABLE ROW LEVEL SECURITY;
