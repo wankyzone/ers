@@ -1,0 +1,2 @@
+ALTER TABLE public.errand_events
+ENABLE ROW LEVEL SECURITY;
