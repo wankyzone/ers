@@ -12,7 +12,24 @@
  *   authorize("admin")
  *   authorize("client", "runner")
  */
+const ROLE_HIERARCHY = {
+  admin: ["super_admin"],
+};
+
+function getAllowedRoles(allowedRoles) {
+  const resolvedRoles = new Set(allowedRoles);
+
+  for (const role of allowedRoles) {
+    const inheritedRoles = ROLE_HIERARCHY[role] || [];
+    inheritedRoles.forEach((inheritedRole) => resolvedRoles.add(inheritedRole));
+  }
+
+  return resolvedRoles;
+}
+
 export function authorize(...allowedRoles) {
+  const resolvedAllowedRoles = getAllowedRoles(allowedRoles);
+
   return function authorizeRole(req, res, next) {
     if (!req.user) {
       return res.status(401).json({
@@ -28,7 +45,7 @@ export function authorize(...allowedRoles) {
       });
     }
 
-    if (!allowedRoles.includes(req.user.role)) {
+    if (!resolvedAllowedRoles.has(req.user.role)) {
       return res.status(403).json({
         success: false,
         message: "You are not authorized to perform this action.",
@@ -37,4 +54,8 @@ export function authorize(...allowedRoles) {
 
     return next();
   };
+}
+
+export function authorizeAdmin() {
+  return authorize("admin");
 }

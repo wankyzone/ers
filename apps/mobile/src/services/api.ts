@@ -131,10 +131,16 @@ let currentUser: {
   email?: string;
 } | null = null;
 
+let currentAccessToken: string | null = null;
+
 export const setApiUser = (
   user: { id: string; role: string; email?: string } | null
 ) => {
   currentUser = user;
+};
+
+export const setApiAuthToken = (token: string | null) => {
+  currentAccessToken = token;
 };
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -267,6 +273,9 @@ export async function apiFetch<TData = ApiMessageResponse | string | null>(
             'x-role': currentUser.role,
             'x-runner-id': currentUser.id,
           }
+        : {}),
+      ...(currentAccessToken
+        ? { Authorization: `Bearer ${currentAccessToken}` }
         : {}),
       ...(options.headers ?? {}),
     },

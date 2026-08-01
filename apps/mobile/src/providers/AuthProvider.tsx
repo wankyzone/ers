@@ -6,6 +6,7 @@ import {
 } from "react";
 
 import type {
+  AuthChangeEvent,
   Session,
   User,
 } from "@supabase/supabase-js";
@@ -13,6 +14,7 @@ import type {
 import { AuthContext } from "../context/AuthContext";
 
 import { supabase } from "@ers/auth";
+import { setApiAuthToken } from "../services/api";
 
 interface Props {
   children: ReactNode;
@@ -27,6 +29,9 @@ const [user, setUser] =
 const [session, setSession] =
     useState<Session | null>(null);
 
+const [accessToken, setAccessToken] =
+    useState<string | null>(null);
+
 const [loading, setLoading] =
     useState(true);
 
@@ -38,9 +43,14 @@ useEffect(() => {
             data
         } = await supabase.auth.getSession();
 
-        setSession(data.session);
+        const currentSession = data.session;
 
-        setUser(data.session?.user ?? null);
+        setSession(currentSession);
+
+        setAccessToken(currentSession?.access_token ?? null);
+        setApiAuthToken(currentSession?.access_token ?? null);
+
+        setUser(currentSession?.user ?? null);
 
         setLoading(false);
 
@@ -55,9 +65,12 @@ useEffect(() => {
     const {
         data: listener,
     } = supabase.auth.onAuthStateChange(
-        (_event, session) => {
+        (_event: AuthChangeEvent, session: Session | null) => {
 
             setSession(session);
+
+            setAccessToken(session?.access_token ?? null);
+            setApiAuthToken(session?.access_token ?? null);
 
             setUser(session?.user ?? null);
 
@@ -126,6 +139,8 @@ const value = useMemo(() => ({
 
     session,
 
+    accessToken,
+
     loading,
 
     signIn,
@@ -139,6 +154,8 @@ const value = useMemo(() => ({
     user,
 
     session,
+
+    accessToken,
 
     loading,
 

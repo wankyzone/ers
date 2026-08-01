@@ -66,6 +66,7 @@ export async function authenticate(req, res, next) {
       kycVerified: accountResult.user.kyc_verified,
       pinSet: accountResult.user.pin_set,
       riskScore: accountResult.user.risk_score,
+      verified: accountResult.user.verified,
     };
 
     return next();

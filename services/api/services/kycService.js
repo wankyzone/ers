@@ -138,23 +138,23 @@ export async function approveKyc(kycId) {
     throw new Error("KYC record not found.");
   }
 
-  // Step 2: Find the associated user
-  const { data: user, error: userError } = await supabase
-    .from("users")
-    .select("id, role, kyc_verified")
+  // Step 2: Find the associated profile
+  const { data: profile, error: profileError } = await supabase
+    .from("profiles")
+    .select("id, role, verified")
     .eq("id", kyc.user_id)
     .single();
 
-  if (userError) {
-    throw new Error(userError.message);
+  if (profileError) {
+    throw new Error(profileError.message);
   }
 
-  if (!user) {
+  if (!profile) {
     throw new Error("User not found.");
   }
 
   // Step 3: Only runners can be KYC verified
-  if (user.role !== "runner") {
+  if (profile.role !== "runner") {
     return {
       success: false,
       message: "Only runner accounts can be KYC verified.",
@@ -184,18 +184,18 @@ export async function approveKyc(kycId) {
   }
 
   // Step 6: Mark the runner as verified
-  console.log("Updating runner:", user.id);
+  console.log("Updating runner:", profile.id);
 
-const { data: updatedUser, error: runnerUpdateError } = await supabase
-  .from("users")
+const { data: updatedProfile, error: runnerUpdateError } = await supabase
+  .from("profiles")
   .update({
-    kyc_verified: true,
+    verified: true,
   })
-  .eq("id", user.id)
+  .eq("id", profile.id)
   .select()
   .single();
 
-console.log("Updated user:", updatedUser);
+console.log("Updated profile:", updatedProfile);
 console.log("Update error:", runnerUpdateError);
 
 if (runnerUpdateError) {
@@ -226,23 +226,23 @@ export async function rejectKyc(kycId, reason) {
     throw new Error("KYC record not found.");
   }
 
-  // Step 2: Find the associated user
-  const { data: user, error: userError } = await supabase
-    .from("users")
+  // Step 2: Find the associated profile
+  const { data: profile, error: profileError } = await supabase
+    .from("profiles")
     .select("id, role")
     .eq("id", kyc.user_id)
     .single();
 
-  if (userError) {
-    throw new Error(userError.message);
+  if (profileError) {
+    throw new Error(profileError.message);
   }
 
-  if (!user) {
+  if (!profile) {
     throw new Error("User not found.");
   }
 
   // Step 3: Only runners can have KYC rejected
-  if (user.role !== "runner") {
+  if (profile.role !== "runner") {
     return {
       success: false,
       message: "Only runner accounts can be KYC reviewed.",
@@ -283,11 +283,11 @@ export async function rejectKyc(kycId, reason) {
 
   // Step 7: Ensure runner stays unverified
   await supabase
-    .from("users")
+    .from("profiles")
     .update({
-      kyc_verified: false,
+      verified: false,
     })
-    .eq("id", user.id);
+    .eq("id", profile.id);
 
   // Step 8: Return success
   return {

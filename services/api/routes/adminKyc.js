@@ -1,5 +1,10 @@
 import express from "express";
 import {
+  authenticate,
+  authorize,
+  authorizeAdmin,
+} from "../modules/protect/index.js";
+import {
   getPendingKycs,
   approveKyc,
   rejectKyc,
@@ -17,7 +22,11 @@ const router = express.Router();
  * GET /admin/kyc
  * Fetch all pending KYC submissions
  */
-router.get("/", async (req, res) => {
+router.get(
+  "/",
+  authenticate,
+  authorizeAdmin(),
+  async (req, res) => {
   try {
     const result = await getPendingKycs();
 
@@ -38,7 +47,11 @@ router.get("/", async (req, res) => {
 /**
  * GET /admin/kyc/:id/documents
  */
-router.get("/:id/documents", async (req, res) => {
+router.get(
+  "/:id/documents",
+  authenticate,
+  authorizeAdmin(),
+  async (req, res) => {
   try {
     const result = await getRunnerDocuments(req.params.id);
 
@@ -56,7 +69,11 @@ router.get("/:id/documents", async (req, res) => {
 /**
  * POST /admin/kyc/:id/approve
  */
-router.post("/:id/approve", async (req, res) => {
+router.post(
+  "/:id/approve",
+  authenticate,
+  authorizeAdmin(),
+  async (req, res) => {
   console.log("Approve endpoint hit:", req.params.id);
 
   try {
@@ -76,9 +93,13 @@ router.post("/:id/approve", async (req, res) => {
 /**
  * POST /admin/kyc/:id/reject
  */
-router.post("/:id/reject", async (req, res) => {
-  try {
-    const { reason } = req.body;
+router.post(
+  "/:id/reject",
+  authenticate,
+  authorizeAdmin(),
+  async (req, res) => {
+    try {
+      const { reason } = req.body;
 
     if (!reason) {
       return res.status(400).json({

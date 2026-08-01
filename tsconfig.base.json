@@ -10,10 +10,11 @@
     "moduleResolution": "node",
     "baseUrl": ".",
     "paths": {
-      "@ers/db": ["packages/db/src"],
-      "@ers/db/*": ["packages/db/src/*"],
-      "@ers/auth": ["apps/auth/src"],
-      "@ers/auth/*": ["apps/auth/src/*"]
+  "@ers/db": ["packages/db/src"],
+  "@ers/db/*": ["packages/db/src/*"],
+
+  "@ers/auth": ["packages/auth/src"],
+  "@ers/auth/*": ["packages/auth/src/*"]
     }
   }
 }

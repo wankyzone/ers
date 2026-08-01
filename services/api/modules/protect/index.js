@@ -1,5 +1,5 @@
 export { authenticate } from "./authenticate.js";
-export { authorize } from "./authorize.js";
+export { authorize, authorizeAdmin } from "./authorize.js";
 
 export {
   verifyAccessToken,
