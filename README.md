@@ -2,17 +2,17 @@
 
 # ERS
 
-### The trusted platform for getting anything done.
+### Africa's Trusted Errand Marketplace
 
 Connect with verified runners to complete errands, deliveries, shopping, pickups, and everyday tasks—quickly, securely, and reliably.
 
 <p>
   <a href="https://ers.wankysoftware.com">Website</a>
-  ·
+  •
   <a href="#">Documentation</a>
-  ·
+  •
   <a href="#">API Reference</a>
-  ·
+  •
   <a href="#">Roadmap</a>
 </p>
 
@@ -26,42 +26,42 @@ Connect with verified runners to complete errands, deliveries, shopping, pickups
 
 ---
 
-## Built for trust.
+# About ERS
 
-ERS is a modern errand marketplace that connects clients with verified runners.
+ERS is a modern errand marketplace connecting clients with verified runners.
 
-Whether it's picking up groceries, delivering packages, purchasing items, or completing everyday errands, ERS provides a secure platform powered by identity verification, real-time tracking, escrow payments, and transparent ratings.
+Whether it's purchasing groceries, delivering packages, picking up documents, or completing everyday errands, ERS provides a secure platform powered by identity verification, real-time tracking, escrow payments, and transparent ratings.
 
 Our mission is simple:
 
-> **Make everyday errands effortless while creating opportunities for thousands of independent runners.**
+> **Make everyday errands effortless while creating opportunities for thousands of independent runners across Africa.**
 
 ---
 
 # Features
 
-### ✅ Verified Runners
+## ✅ Verified Runners
 
-Every runner completes identity verification before accepting jobs.
+Every runner completes identity verification before accepting errands.
 
 - Government ID verification
 - Address verification
 - Emergency contact
-- Manual review process
+- Manual approval workflow
 
 ---
 
-### 📍 Live Tracking
+## 📍 Live Tracking
 
-Know exactly where your runner is from pickup to delivery.
+Track every errand from pickup to completion.
 
-- Real-time location
-- ETA updates
+- Live location updates
+- ETA tracking
 - Delivery confirmation
 
 ---
 
-### 💬 In-app Communication
+## 💬 In-App Communication
 
 Everything stays inside ERS.
 
@@ -71,50 +71,95 @@ Everything stays inside ERS.
 
 ---
 
-### 💳 Secure Payments
+## 💳 Secure Payments
 
-Payments are protected until the errand is completed.
+Payments remain protected until the errand is completed.
 
 - Escrow workflow
 - Paystack integration
-- Instant payout support
+- Instant payouts
 
 ---
 
-### ⭐ Ratings & Reviews
+## ⭐ Ratings & Reviews
 
-Trust is earned through every completed errand.
+Trust is built after every completed errand.
 
 - Customer ratings
 - Runner ratings
-- Performance metrics
+- Performance history
 
 ---
 
-### 🛡 Admin Dashboard
+## 🛡 Admin Control Center
 
-Powerful tools for managing the marketplace.
+Manage the entire marketplace from one dashboard.
 
 - Runner verification
 - User management
+- Errand management
 - Analytics
-- Dispute handling
 - Platform monitoring
+- Dispute resolution
+
+---
+
+# Project Status
+
+| Module | Status |
+|---------|--------|
+| Authentication | ✅ Complete |
+| Authorization | ✅ Complete |
+| Runner Verification (KYC) | ✅ Complete |
+| Mobile App | 🚧 In Progress |
+| Admin Dashboard | 🚧 Sprint 5 |
+| Marketplace Engine | 🚧 Planned |
+| Payments | 🚧 Planned |
+| Notifications | 🚧 Planned |
 
 ---
 
 # Architecture
 
 ```
+                 Mobile App (Expo)
+
+                       │
+
+                 Express API
+
+                       │
+
+        ┌──────────────┴──────────────┐
+        │                             │
+    Supabase                      BullMQ
+(Auth + Database)              Background Jobs
+
+        │                             │
+        ├──────────────┐              │
+        │              │              │
+ Azure Blob      Paystack       Redis Queue
+   Storage        Payments
+```
+
+---
+
+# Repository Structure
+
+```
 apps/
-├── mobile        # Expo React Native App
-├── admin         # Next.js Admin Dashboard
+├── mobile                 # Expo React Native app
+├── admin                  # Next.js Admin Dashboard
 
 packages/
-├── backend       # Express API
-├── shared        # Shared Types
-├── ui            # Shared Components
-└── emails        # Email Templates
+├── backend                # Express API
+├── shared                 # Shared Types
+├── ui                     # Shared Components
+└── emails                 # Email Templates
+
+supabase/
+docs/
+scripts/
 ```
 
 ---
@@ -124,33 +169,49 @@ packages/
 | Layer | Technology |
 |--------|------------|
 | Mobile | React Native + Expo |
-| Admin | Next.js |
+| Admin Dashboard | Next.js |
 | Backend | Express.js |
 | Database | Supabase |
 | Authentication | Supabase Auth |
 | Payments | Paystack |
 | Storage | Azure Blob Storage |
-| Maps | Google Maps |
 | Queue | BullMQ + Redis |
+| Maps | Google Maps |
 | Language | TypeScript |
 
 ---
 
 # Getting Started
 
-Clone the repository
+## 1. Clone the repository
 
 ```bash
 git clone https://github.com/wankysoftware/ers.git
+cd ers
 ```
 
-Install dependencies
+## 2. Install dependencies
 
 ```bash
 pnpm install
 ```
 
-Start development
+## 3. Configure Environment Variables
+
+Create a `.env` file in the project root (or copy from `.env.example` if available).
+
+Example:
+
+```env
+SUPABASE_URL=your_supabase_url
+SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
+PAYSTACK_SECRET_KEY=your_paystack_secret
+JWT_SECRET=your_jwt_secret
+```
+
+> Additional environment variables may be required depending on the services you are running.
+
+## 4. Start the development server
 
 ```bash
 pnpm dev
@@ -158,49 +219,30 @@ pnpm dev
 
 ---
 
-# Repository Structure
+# Available Scripts
 
-```
-ERS
-│
-├── apps
-│   ├── mobile
-│   └── admin
-│
-├── packages
-│   ├── backend
-│   ├── shared
-│   ├── ui
-│   └── emails
-│
-├── supabase
-├── docs
-└── scripts
+```bash
+pnpm dev          # Start development
+
+pnpm build        # Build project
+
+pnpm lint         # Run linter
+
+pnpm test         # Run tests
 ```
 
 ---
 
-# Current Status
+# Roadmap
 
-ERS is currently under active development.
-
-Current focus includes:
-
-- Runner Verification
-- Client App
-- Runner App
-- Payments
-- Admin Dashboard
-- Analytics
-- Notifications
-
----
-
-# Vision
-
-We're building more than an errand app.
-
-ERS aims to become Africa's most trusted marketplace for on-demand services by combining technology, identity, logistics, and trust into one platform.
+- ✅ Sprint 1
+- ✅ Sprint 2
+- ✅ Sprint 3
+- ✅ Sprint 4 — Authentication, Authorization & Runner Verification
+- 🚧 Sprint 5 — Admin Control Center
+- ⏳ Sprint 6 — Marketplace Engine
+- ⏳ Sprint 7 — Payments
+- ⏳ Sprint 8 — Notifications & Loyalty
 
 ---
 
@@ -208,10 +250,13 @@ ERS aims to become Africa's most trusted marketplace for on-demand services by c
 
 We welcome contributions from developers, designers, and product thinkers.
 
-1. Fork the repository
-2. Create a feature branch
-3. Commit your changes
-4. Open a Pull Request
+1. Fork the repository.
+2. Create a feature branch.
+3. Commit your changes.
+4. Push your branch.
+5. Open a Pull Request.
+6. Address automated review feedback.
+7. Merge after approval.
 
 ---
 
@@ -229,8 +274,8 @@ This project is licensed under the MIT License.
 
 <div align="center">
 
-Built with ❤️ by **Wanky Technologies Ltd**
+### Built by Wanky Technologies Ltd
 
-**Building Africa's Most Trusted Errand Platform**
+**Building Africa's Most Trusted Errand Platform.**
 
 </div>
