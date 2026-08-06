@@ -33,7 +33,7 @@ function buildUrl(path: string, baseUrl: string, params?: ApiRequestOptions["par
   return url.toString();
 }
 
-function shouldSerializeJson(body: RequestBody): boolean {
+function shouldSerializeJson(body: RequestBody | undefined): boolean {
   return (
     body !== undefined &&
     body !== null &&
