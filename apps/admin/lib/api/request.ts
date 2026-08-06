@@ -1,7 +1,7 @@
 import { defaultAuthTokenStore, getAuthToken } from "./auth";
 import { getApiBaseUrl } from "./config";
 import { ApiError } from "./errors";
-import type { ApiRequestOptions, AuthTokenStore, HttpMethod } from "./types";
+import type { ApiRequestOptions, AuthTokenStore, HttpMethod, RequestBody } from "./types";
 
 export interface RequestConfig {
   baseUrl?: string;
