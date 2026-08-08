@@ -3,7 +3,7 @@
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 
-import { supabase } from "@/lib/supabase";
+import { getSupabaseClient } from "@/lib/supabase";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -16,6 +16,8 @@ export default function LoginPage() {
     event.preventDefault();
     setError(null);
     setIsSubmitting(true);
+
+    const supabase = getSupabaseClient();
 
     const { error: signInError } =
       await supabase.auth.signInWithPassword({
