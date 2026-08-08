@@ -37,14 +37,15 @@ export async function getActiveClients() {
     .from('errands')
     .select('client_id')
     .not('client_id', 'is', null)
-    .gte('created_at', thirtyDaysAgo)
-    .distinct('client_id');
+    .gte('created_at', thirtyDaysAgo);
 
   if (error) {
     throw new Error(`Failed to count active clients: ${error.message}`);
   }
 
-  return data?.length ?? 0;
+  const ids = (data ?? []).map((r) => r.client_id).filter((id) => id != null);
+  const unique = new Set(ids);
+  return unique.size;
 }
 
 export async function getPendingKycReviews() {
