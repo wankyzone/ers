@@ -3,7 +3,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 
-import { supabase } from "@/lib/supabase";
+import { getSupabaseClient } from "@/lib/supabase";
 import { setAuthToken } from "@/lib/api/auth";
 
 interface AdminAuthProviderProps {
@@ -18,6 +18,7 @@ export function AdminAuthProvider({
 
   useEffect(() => {
     let mounted = true;
+    const supabase = getSupabaseClient();
 
     const syncSession = async () => {
       const {
