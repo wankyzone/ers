@@ -1,22 +1,16 @@
+"use client";
+
+import { useMemo } from "react";
+import Link from "next/link";
 import {
   Card,
   CardContent,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-
-const metrics = [
-  { label: "Total Runners", value: "24" },
-  { label: "Active Clients", value: "128" },
-  { label: "Open Errands", value: "16" },
-  { label: "Pending KYC Reviews", value: "8" },
-] as const;
-
-const recentActivity = [
-  "New runner application received.",
-  "Client account verified.",
-  "Errand assigned to a runner.",
-] as const;
+import { useApi } from "@/hooks/useApi";
+import { useAsync } from "@/hooks/useAsync";
+import { getDashboardOverview } from "@/lib/api/dashboard";
 
 const quickActions = [
   { label: "Review KYC", href: "/kyc" },
@@ -24,7 +18,45 @@ const quickActions = [
   { label: "Manage Runners", href: "/runners" },
 ] as const;
 
+function formatActivityMessage(activity: Record<string, unknown>) {
+  if (typeof activity.action === "string") {
+    return `${activity.action}${activity.entity ? ` ${activity.entity}` : ""}`.trim();
+  }
+
+  if (typeof activity.eventType === "string") {
+    return activity.eventType;
+  }
+
+  if (typeof activity.source === "string") {
+    return activity.source;
+  }
+
+  return "Recent activity event";
+}
+
 export default function DashboardPage() {
+  const api = useApi();
+  const { data, error, isLoading } = useAsync(() => getDashboardOverview(api));
+
+  const stats = data?.stats ?? {
+    totalRunners: 0,
+    activeClients: 0,
+    openErrands: 0,
+    pendingKycReviews: 0,
+  };
+
+  const metrics = useMemo(
+    () => [
+      { label: "Total Runners", value: stats.totalRunners.toString() },
+      { label: "Active Clients", value: stats.activeClients.toString() },
+      { label: "Open Errands", value: stats.openErrands.toString() },
+      { label: "Pending KYC Reviews", value: stats.pendingKycReviews.toString() },
+    ],
+    [stats],
+  );
+
+  const recentActivity = data?.recentActivity ?? [];
+
   return (
     <div>
       <section aria-labelledby="dashboard-title">
@@ -33,6 +65,12 @@ export default function DashboardPage() {
       </section>
 
       <section aria-label="Dashboard metrics">
+        {error ? (
+          <p className="text-destructive">Unable to load dashboard stats. {error.message}</p>
+        ) : isLoading ? (
+          <p>Loading dashboard metrics...</p>
+        ) : null}
+
         {metrics.map((metric) => (
           <Card key={metric.label}>
             <CardHeader>
@@ -49,11 +87,23 @@ export default function DashboardPage() {
         <h2 id="recent-activity-title">Recent Activity</h2>
         <Card>
           <CardContent>
-            <ul>
-              {recentActivity.map((activity) => (
-                <li key={activity}>{activity}</li>
-              ))}
-            </ul>
+            {error ? (
+              <p className="text-destructive">Unable to load recent activity.</p>
+            ) : isLoading ? (
+              <p>Loading recent activity...</p>
+            ) : (
+              <ul>
+                {recentActivity.length > 0 ? (
+                  recentActivity.map((activity) => (
+                    <li key={String(activity.id) || JSON.stringify(activity)}>
+                      {formatActivityMessage(activity as Record<string, unknown>)}
+                    </li>
+                  ))
+                ) : (
+                  <li>No recent activity available.</li>
+                )}
+              </ul>
+            )}
           </CardContent>
         </Card>
       </section>
@@ -65,7 +115,7 @@ export default function DashboardPage() {
             <ul>
               {quickActions.map((action) => (
                 <li key={action.href}>
-                  <a href={action.href}>{action.label}</a>
+                  <Link href={action.href}>{action.label}</Link>
                 </li>
               ))}
             </ul>

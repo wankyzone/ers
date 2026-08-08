@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 
+import { AdminAuthProvider } from "@/components/auth/admin-auth-provider";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
 
 interface DashboardRouteLayoutProps {
@@ -9,5 +10,9 @@ interface DashboardRouteLayoutProps {
 export default function DashboardRouteLayout({
   children,
 }: DashboardRouteLayoutProps) {
-  return <DashboardLayout>{children}</DashboardLayout>;
+  return (
+    <AdminAuthProvider>
+      <DashboardLayout>{children}</DashboardLayout>
+    </AdminAuthProvider>
+  );
 }
