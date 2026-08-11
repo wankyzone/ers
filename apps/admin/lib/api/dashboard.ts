@@ -19,8 +19,17 @@ export interface DashboardOverview {
   recentActivity: DashboardActivityItem[];
 }
 
+interface DashboardOverviewResponse {
+  success: boolean;
+  data: DashboardOverview;
+}
+
 export async function getDashboardOverview(
   client: ApiClient = apiClient,
 ): Promise<DashboardOverview> {
-  return client.get<DashboardOverview>("/api/admin/dashboard/overview");
+  const response = await client.get<DashboardOverviewResponse>(
+    "/api/admin/dashboard/overview",
+  );
+
+  return response.data;
 }
