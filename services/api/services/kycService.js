@@ -321,6 +321,6 @@ export async function rejectKyc(kycId, reason) {
   return {
     success: true,
     message: "KYC rejected successfully.",
-    data: updatedKyc,
+    data: resultKyc,
   };
 }
