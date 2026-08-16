@@ -211,35 +211,51 @@ if (runnerUpdateError) {
 }
 
 export async function rejectKyc(kycId, reason) {
-  // Step 1: Find the KYC record
-  const { data: kyc, error: kycError } = await supabase
+  // Step 1: Find the KYC record (diagnostic-only: use .select() to inspect row counts)
+  const { data: kycData, error: kycError } = await supabase
     .from("kyc_profiles")
-    .select("*")
-    .eq("id", kycId)
-    .single();
+    .select("id, user_id, status")
+    .eq("id", kycId);
+
+  const kycRowCount = Array.isArray(kycData) ? kycData.length : (kycData ? 1 : 0);
+  console.log(`[rejectKyc][DB] query=kyc_lookup kycId=${kycId} userId=${kycRowCount===1 ? kycData[0].user_id : 'unknown'} rows=${kycRowCount} error=${kycError ? `${kycError.code || 'err'}:${kycError.message}` : 'none'}`);
 
   if (kycError) {
     throw new Error(kycError.message);
   }
 
-  if (!kyc) {
+  if (kycRowCount === 0) {
     throw new Error("KYC record not found.");
   }
 
-  // Step 2: Find the associated profile
-  const { data: profile, error: profileError } = await supabase
+  if (kycRowCount > 1) {
+    throw new Error(`Unexpected multiple KYC records (${kycRowCount}) for id ${kycId}`);
+  }
+
+  const kyc = kycData[0];
+
+  // Step 2: Find the associated profile (diagnostic-only: use .select() and enforce exactly one row)
+  const { data: profileData, error: profileError } = await supabase
     .from("profiles")
     .select("id, role")
-    .eq("id", kyc.user_id)
-    .single();
+    .eq("id", kyc.user_id);
+
+  const profileRowCount = Array.isArray(profileData) ? profileData.length : (profileData ? 1 : 0);
+  console.log(`[rejectKyc][DB] query=profile_lookup kycId=${kycId} userId=${kyc.user_id} rows=${profileRowCount} error=${profileError ? `${profileError.code || 'err'}:${profileError.message}` : 'none'}`);
 
   if (profileError) {
     throw new Error(profileError.message);
   }
 
-  if (!profile) {
+  if (profileRowCount === 0) {
     throw new Error("User not found.");
   }
+
+  if (profileRowCount > 1) {
+    throw new Error(`Multiple profiles (${profileRowCount}) found for user ${kyc.user_id}`);
+  }
+
+  const profile = profileData[0];
 
   // Step 3: Only runners can have KYC rejected
   if (profile.role !== "runner") {
@@ -265,8 +281,8 @@ export async function rejectKyc(kycId, reason) {
     };
   }
 
-  // Step 6: Reject the KYC
-  const { data: updatedKyc, error: updateError } = await supabase
+  // Step 6: Reject the KYC (diagnostic-only: inspect update row count)
+  const { data: updatedKycData, error: updateError } = await supabase
     .from("kyc_profiles")
     .update({
       status: "rejected",
@@ -274,12 +290,24 @@ export async function rejectKyc(kycId, reason) {
       rejected_at: new Date().toISOString(),
     })
     .eq("id", kycId)
-    .select()
-    .single();
+    .select("id, user_id, status");
+
+  const updateRowCount = Array.isArray(updatedKycData) ? updatedKycData.length : (updatedKycData ? 1 : 0);
+  console.log(`[rejectKyc][DB] query=kyc_update kycId=${kycId} userId=${kyc.user_id} rows=${updateRowCount} error=${updateError ? `${updateError.code || 'err'}:${updateError.message}` : 'none'}`);
 
   if (updateError) {
     throw new Error(updateError.message);
   }
+
+  if (updateRowCount === 0) {
+    throw new Error("Failed to update KYC (no rows returned).");
+  }
+
+  if (updateRowCount > 1) {
+    throw new Error(`Unexpected multiple rows (${updateRowCount}) returned for KYC update id ${kycId}`);
+  }
+
+  const resultKyc = updatedKycData[0];
 
   // Step 7: Ensure runner stays unverified
   await supabase
@@ -293,6 +321,6 @@ export async function rejectKyc(kycId, reason) {
   return {
     success: true,
     message: "KYC rejected successfully.",
-    data: updatedKyc,
+    data: resultKyc,
   };
 }
