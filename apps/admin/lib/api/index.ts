@@ -4,4 +4,5 @@ export * from "./config";
 export * from "./errors";
 export * from "./kyc";
 export * from "./request";
+export * from "./settings";
 export * from "./types";
