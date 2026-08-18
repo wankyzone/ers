@@ -20,6 +20,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuGroup,
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
@@ -122,8 +123,10 @@ export function Header({ onOpenMobileSidebar }: HeaderProps) {
                 }
               />
               <DropdownMenuContent className="w-56">
-                <DropdownMenuLabel>Signed in as Admin</DropdownMenuLabel>
-                <DropdownMenuSeparator />
+                <DropdownMenuGroup>
+                  <DropdownMenuLabel>Signed in as Admin</DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                </DropdownMenuGroup>
                 <DropdownMenuItem>
                   <UserIcon className="mr-2 size-4" />
                   Profile
