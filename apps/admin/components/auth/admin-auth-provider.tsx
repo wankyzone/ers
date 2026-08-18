@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 
 import { getSupabaseClient } from "@/lib/supabase";
 import { setAuthToken } from "@/lib/api/auth";
+import { request } from "@/lib/api/request";
 
 interface AdminAuthProviderProps {
   children: ReactNode;
@@ -19,6 +20,55 @@ export function AdminAuthProvider({
   useEffect(() => {
     let mounted = true;
     const supabase = getSupabaseClient();
+    let lastVerifiedToken: string | null = null;
+
+    async function verifyAdminAndSet(token: string | null) {
+      if (!token) return;
+      // avoid duplicate verification for the same token
+      if (token === lastVerifiedToken) return;
+
+      try {
+        const payload = await request<{ success: boolean; data: { id: string; email?: string | null; role: string } }>(
+          '/admin/me',
+          { method: 'GET' }
+        );
+
+        if (!mounted) return;
+
+        if (payload && payload.success) {
+          lastVerifiedToken = token;
+          setIsLoading(false);
+          return;
+        }
+
+        // If payload not successful, treat as unauthorized
+        setAuthToken(null);
+        router.replace('/login');
+      } catch (err: unknown) {
+        const statusCandidate =
+          typeof err === 'object' && err !== null
+            ? ((err as Record<string, unknown>).status ?? (err as Record<string, unknown>).statusCode)
+            : null;
+
+        const status = typeof statusCandidate === 'number' ? statusCandidate : null;
+
+        if (status === 401) {
+          setAuthToken(null);
+          if (mounted) router.replace('/login');
+          return;
+        }
+
+        if (status === 403) {
+          // Authenticated but not admin
+          if (mounted) router.replace('/unauthorized');
+          return;
+        }
+
+        // Fallback: clear token and redirect to login
+        setAuthToken(null);
+        if (mounted) router.replace('/login');
+      }
+    }
 
     const syncSession = async () => {
       const {
@@ -36,7 +86,7 @@ export function AdminAuthProvider({
       }
 
       setAuthToken(session.access_token);
-      setIsLoading(false);
+      await verifyAdminAndSet(session.access_token ?? null);
     };
 
     void syncSession();
@@ -51,7 +101,7 @@ export function AdminAuthProvider({
       }
 
       setAuthToken(session.access_token);
-      setIsLoading(false);
+      void verifyAdminAndSet(session.access_token ?? null);
     });
 
     return () => {

@@ -15,6 +15,7 @@ import banksRouter from './routes/banks.js';
 import otpRouter from './routes/otp.js';
 import supabase from './supabase.js';
 import adminKycRoutes from "./routes/adminKyc.js";
+import adminRoutes from "./routes/admin.js";
 import dashboardRouter from './routes/dashboard.js';
 import adminSettingsRoutes from './routes/adminSettings.js';
 import storageRoutes from './routes/storage.js';
@@ -125,6 +126,7 @@ app.use('/api/storage', storageRoutes);
 app.use('/api/pin', pinRouter);
 app.use('/api/banks', banksRouter);
 app.use('/api/otp', otpRouter);
+app.use('/api/admin', adminRoutes);
 app.use('/api/admin/kyc', adminKycRoutes);
 app.use('/api/admin/dashboard', dashboardRouter);
 app.use('/api/admin/settings', adminSettingsRoutes);
@@ -185,6 +187,7 @@ function registeredRoutes() {
     ...listRoutes(banksRouter, '/api/banks'),
     ...listRoutes(otpRouter, '/otp'),
     ...listRoutes(otpRouter, '/api/otp'),
+    ...listRoutes(adminRoutes, '/admin'),
     ...listRoutes(adminKycRoutes, '/admin/kyc'),
     ...listRoutes(adminKycRoutes, '/api/admin/kyc'),
     ...listRoutes(dashboardRouter, '/api/admin/dashboard'),

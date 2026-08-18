@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation"
 import {
   BellIcon,
   ChevronRightIcon,
+  LogOutIcon,
   MenuIcon,
   ShieldCheckIcon,
   SettingsIcon,
@@ -13,6 +14,8 @@ import {
 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
+import { getSupabaseClient } from "@/lib/supabase"
+import { setAuthToken } from "@/lib/api/auth"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -41,6 +44,12 @@ interface HeaderProps {
 
 export function Header({ onOpenMobileSidebar }: HeaderProps) {
   const pathname = usePathname() ?? ""
+
+  const handleLogout = async () => {
+    const supabase = getSupabaseClient()
+    await supabase.auth.signOut()
+    setAuthToken(null)
+  }
 
   const breadcrumbs = useMemo(() => {
     const segments = pathname.split("/").filter(Boolean)
@@ -124,6 +133,11 @@ export function Header({ onOpenMobileSidebar }: HeaderProps) {
                 <DropdownMenuItem>
                   <ShieldCheckIcon className="mr-2 size-4" />
                   Security
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={handleLogout}>
+                  <LogOutIcon className="mr-2 size-4" />
+                  Logout
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
