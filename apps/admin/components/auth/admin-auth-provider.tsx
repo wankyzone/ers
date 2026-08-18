@@ -29,7 +29,7 @@ export function AdminAuthProvider({
 
       try {
         const payload = await request<{ success: boolean; data: { id: string; email?: string | null; role: string } }>(
-          '/admin/me',
+          '/api/admin/me',
           { method: 'GET' }
         );
 
