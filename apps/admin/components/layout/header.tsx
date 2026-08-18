@@ -112,13 +112,15 @@ export function Header({ onOpenMobileSidebar }: HeaderProps) {
               <BellIcon className="size-5" />
             </Button>
             <DropdownMenu>
-              <DropdownMenuTrigger>
-                <Button variant="outline" size="icon" className="rounded-full">
-                  <Avatar>
-                    <AvatarFallback>AD</AvatarFallback>
-                  </Avatar>
-                </Button>
-              </DropdownMenuTrigger>
+              <DropdownMenuTrigger
+                render={
+                  <Button variant="outline" size="icon" className="rounded-full">
+                    <Avatar>
+                      <AvatarFallback>AD</AvatarFallback>
+                    </Avatar>
+                  </Button>
+                }
+              />
               <DropdownMenuContent className="w-56">
                 <DropdownMenuLabel>Signed in as Admin</DropdownMenuLabel>
                 <DropdownMenuSeparator />
