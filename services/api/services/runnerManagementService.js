@@ -9,7 +9,7 @@ function mapRunner(runner, profile = null) {
 
   return {
     id: runner.id,
-    name: runner.name ?? profile?.full_name ?? null,
+    name: runner.name ?? null,
     email: runner.email ?? profile?.email ?? null,
     role: profile?.role ?? null,
     verified,
@@ -49,7 +49,7 @@ export async function getAdminRunnerList({
   if (runnerIds.length > 0) {
     const { data: profiles, error: profileError } = await supabase
       .from('profiles')
-      .select('id, email, role, verified, full_name')
+      .select('id, email, role, verified')
       .in('id', runnerIds);
 
     if (profileError) {
@@ -118,7 +118,7 @@ export async function getAdminRunnerById(runnerId) {
 
   const { data: profile, error: profileError } = await supabase
     .from('profiles')
-    .select('id, email, role, verified, full_name')
+    .select('id, email, role, verified')
     .eq('id', runnerId)
     .maybeSingle();
 
@@ -159,7 +159,7 @@ export async function updateRunnerAvailability(runnerId, isAvailable) {
 
   const { data: profile, error: profileError } = await supabase
     .from('profiles')
-    .select('id, email, role, verified, full_name')
+    .select('id, email, role, verified')
     .eq('id', runnerId)
     .maybeSingle();
 
