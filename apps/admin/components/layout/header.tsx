@@ -122,49 +122,48 @@ export function Header({ onOpenMobileSidebar }: HeaderProps) {
                   </Button>
                 }
               />
--              <DropdownMenuContent className="w-56">
-+              <DropdownMenuContent className="w-56 border border-border bg-popover/95 shadow-xl shadow-black/40 backdrop-blur-sm">
-                 <DropdownMenuGroup>
-                   <DropdownMenuLabel>Signed in as Admin</DropdownMenuLabel>
-                   <DropdownMenuSeparator />
-                 </DropdownMenuGroup>
-                 <DropdownMenuItem>
-                   <UserIcon className="mr-2 size-4" />
-                   Profile
-                 </DropdownMenuItem>
-                 <DropdownMenuItem>
-                   <SettingsIcon className="mr-2 size-4" />
-                   Settings
-                 </DropdownMenuItem>
-                 <DropdownMenuItem>
-                   <ShieldCheckIcon className="mr-2 size-4" />
-                   Security
-                 </DropdownMenuItem>
-                 <DropdownMenuSeparator />
-                 <DropdownMenuItem onClick={handleLogout}>
-                   <LogOutIcon className="mr-2 size-4" />
-                   Logout
-                 </DropdownMenuItem>
-               </DropdownMenuContent>
-             </DropdownMenu>
-           </div>
-         </div>
-         <div className="flex flex-col gap-3 md:hidden">
-           <Input type="search" placeholder="Search ERS..." aria-label="Search" />
-           <div className="flex items-center justify-between gap-3">
-             <div className="inline-flex items-center gap-2 rounded-3xl border border-border bg-muted px-3 py-2 text-sm text-muted-foreground">
-               <BellIcon className="size-4" />
-               Notifications
-             </div>
-             <div className="inline-flex items-center gap-2 rounded-3xl border border-border bg-muted px-3 py-2 text-sm text-muted-foreground">
-               <Avatar size="sm">
-                 <AvatarFallback>AD</AvatarFallback>
-               </Avatar>
-               <span>Admin</span>
-             </div>
-           </div>
-         </div>
-       </div>
-     </header>
-   )
- }
+              <DropdownMenuContent className="w-56 border border-border bg-popover/95 shadow-xl shadow-black/40 backdrop-blur-sm">
+                <DropdownMenuGroup>
+                  <DropdownMenuLabel>Signed in as Admin</DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                </DropdownMenuGroup>
+                <DropdownMenuItem>
+                  <UserIcon className="mr-2 size-4" />
+                  Profile
+                </DropdownMenuItem>
+                <DropdownMenuItem>
+                  <SettingsIcon className="mr-2 size-4" />
+                  Settings
+                </DropdownMenuItem>
+                <DropdownMenuItem>
+                  <ShieldCheckIcon className="mr-2 size-4" />
+                  Security
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={handleLogout}>
+                  <LogOutIcon className="mr-2 size-4" />
+                  Logout
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        </div>
+        <div className="flex flex-col gap-3 md:hidden">
+          <Input type="search" placeholder="Search ERS..." aria-label="Search" />
+          <div className="flex items-center justify-between gap-3">
+            <div className="inline-flex items-center gap-2 rounded-3xl border border-border bg-muted px-3 py-2 text-sm text-muted-foreground">
+              <BellIcon className="size-4" />
+              Notifications
+            </div>
+            <div className="inline-flex items-center gap-2 rounded-3xl border border-border bg-muted px-3 py-2 text-sm text-muted-foreground">
+              <Avatar size="sm">
+                <AvatarFallback>AD</AvatarFallback>
+              </Avatar>
+              <span>Admin</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </header>
+  )
+}
