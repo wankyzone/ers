@@ -1,10 +1,18 @@
 import { apiClient, ApiClient } from "./index";
 
+export interface ErrandPipelineCounts {
+  created: number;
+  accepted: number;
+  completed: number;
+  confirmed: number;
+}
+
 export interface DashboardStats {
   totalRunners: number;
   activeClients: number;
   openErrands: number;
   pendingKycReviews: number;
+  errandPipeline?: ErrandPipelineCounts;
 }
 
 export interface DashboardActivityItem {
