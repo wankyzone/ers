@@ -1,5 +1,11 @@
 import supabase from '../supabase.js';
 
+function sanitizeSearchTerm(value = '') {
+  // PostgREST LIKE filters treat % and _ as wildcards. Remove them so user input
+  // cannot mutate the filter expression or match unintended rows.
+  return String(value).trim().replace(/[\\%_]/g, '');
+}
+
 /**
  * Maps raw errand + joined data into a normalized errand record.
  * Joins are performed separately from the main query for flexibility.
@@ -13,7 +19,7 @@ function mapErrand(errand, clientProfile = null, runnerData = null) {
     price: Number(errand.price ?? 0),
     payoutAmount: Number(errand.payout_amount ?? 0),
     clientId: errand.client_id ?? null,
-    clientName: clientProfile?.name ?? null,
+    clientName: null,
     clientEmail: clientProfile?.email ?? null,
     assignedRunnerId: errand.assigned_runner_id ?? null,
     runnerName: runnerData?.name ?? null,
@@ -66,7 +72,6 @@ export async function getAdminErrandList({
   const normalizedPage = Math.max(1, Number(page) || 1);
   const normalizedLimit = Math.min(100, Math.max(1, Number(limit) || 20));
 
-  // Build base query with count
   let query = supabase
     .from('errands')
     .select(
@@ -75,19 +80,19 @@ export async function getAdminErrandList({
     )
     .order('created_at', { ascending: false });
 
-  // Apply search filter BEFORE pagination (server-side, database-level)
   if (search && search.trim()) {
-    const searchTerm = search.trim();
-    // Search across title and description using case-insensitive LIKE
-    query = query.or(`title.ilike.%${searchTerm}%,description.ilike.%${searchTerm}%`);
+    const searchTerm = sanitizeSearchTerm(search);
+    if (searchTerm) {
+      // Server-side filtering happens before pagination; this prevents wildcards from
+      // being interpreted as PostgREST operators and keeps the query safe.
+      query = query.or(`title.ilike.%${searchTerm}%,description.ilike.%${searchTerm}%`);
+    }
   }
 
-  // Apply status filter BEFORE pagination
   if (status !== 'all' && status) {
     query = query.eq('status', status);
   }
 
-  // Apply pagination to filtered results
   const start = (normalizedPage - 1) * normalizedLimit;
   const { data: errands, count, error } = await query.range(start, start + normalizedLimit - 1);
 
@@ -95,17 +100,19 @@ export async function getAdminErrandList({
     throw new Error(`Failed to fetch errands: ${error.message}`);
   }
 
-  // Fetch client profiles for all errands
+  const totalCount = count ?? 0;
+  const totalPages = totalCount === 0 ? 1 : Math.ceil(totalCount / normalizedLimit);
+
   const clientIds = (errands ?? [])
     .map((e) => e.client_id)
     .filter((id) => id != null && id !== '');
-  let clientProfiles = {};
+  let clientProfiles = new Map();
 
   if (clientIds.length > 0) {
     const { data: profiles, error: profileError } = await supabase
       .from('profiles')
       .select('id, email')
-      .in('id', [...new Set(clientIds)]); // Deduplicate
+      .in('id', [...new Set(clientIds)]);
 
     if (profileError) {
       throw new Error(`Failed to fetch client profiles: ${profileError.message}`);
@@ -114,25 +121,23 @@ export async function getAdminErrandList({
     clientProfiles = new Map((profiles ?? []).map((p) => [p.id, p]));
   }
 
-  // Fetch runner data for all assigned errands
   const runnerIds = (errands ?? [])
     .map((e) => e.assigned_runner_id)
     .filter((id) => id != null && id !== '');
-  let runnerMap = {};
+  let runnerMap = new Map();
 
   if (runnerIds.length > 0) {
     const { data: runners, error: runnerError } = await supabase
       .from('runners')
       .select('id, name, email, total_earnings')
-      .in('id', [...new Set(runnerIds)]); // Deduplicate
+      .in('id', [...new Set(runnerIds)]);
 
     if (runnerError) {
       throw new Error(`Failed to fetch runners: ${runnerError.message}`);
     }
 
-    // Join runner data with profile verified status
     const runnerIds2 = (runners ?? []).map((r) => r.id);
-    let runnerProfiles = {};
+    let runnerProfiles = new Map();
     if (runnerIds2.length > 0) {
       const { data: profiles, error: profileError } = await supabase
         .from('profiles')
@@ -159,7 +164,6 @@ export async function getAdminErrandList({
     );
   }
 
-  // Map errands with joined data
   const mappedErrands = (errands ?? []).map((errand) =>
     mapErrand(
       errand,
@@ -168,14 +172,10 @@ export async function getAdminErrandList({
     )
   );
 
-  const totalCount = count ?? 0;
-  const totalPages = Math.max(1, Math.ceil(totalCount / normalizedLimit));
-  const pageIndex = Math.min(Math.max(1, normalizedPage), totalPages);
-
   return {
     errands: mappedErrands,
     totalCount,
-    page: pageIndex,
+    page: normalizedPage,
     limit: normalizedLimit,
     totalPages,
   };
