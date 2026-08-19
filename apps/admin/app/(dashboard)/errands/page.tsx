@@ -94,7 +94,9 @@ export default function ErrandsPage() {
   }, [api, debouncedSearch, statusFilter, page, run]);
 
   useEffect(() => {
-    if (!selectedId) {
+    const activeSelectedId = selectedId;
+
+    if (!activeSelectedId) {
       setDetail(null);
       setDetailError(null);
       setDetailLoading(false);
@@ -108,7 +110,7 @@ export default function ErrandsPage() {
       setDetailError(null);
 
       try {
-        const nextDetail = await getErrandById(selectedId, api);
+        const nextDetail = await getErrandById(activeSelectedId, api);
 
         if (!ignore) {
           setDetail(nextDetail);
