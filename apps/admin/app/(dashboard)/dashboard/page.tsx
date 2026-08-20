@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/card";
 import { useApi } from "@/hooks/useApi";
 import { useAsync } from "@/hooks/useAsync";
-import { getDashboardOverview } from "@/lib/api/dashboard";
+import { getDashboardOverview, getSystemHealth } from "@/lib/api/dashboard";
 
 const quickActions = [
   { label: "Review KYC", href: "/kyc" },
@@ -37,6 +37,7 @@ function formatActivityMessage(activity: Record<string, unknown>) {
 export default function DashboardPage() {
   const api = useApi();
   const { data, error, isLoading } = useAsync(() => getDashboardOverview(api));
+  const { data: health, error: healthError, isLoading: healthLoading } = useAsync(() => getSystemHealth(api));
 
   const stats = data?.stats ?? {
     totalRunners: 0,
@@ -81,6 +82,25 @@ export default function DashboardPage() {
             </CardContent>
           </Card>
         ))}
+      </section>
+
+      <section aria-label="System Health">
+        <Card>
+          <CardHeader>
+            <CardTitle>System Health</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {healthLoading ? (
+              <p>Loading system health...</p>
+            ) : healthError ? (
+              <p className="text-destructive">Unhealthy</p>
+            ) : health?.status === "ok" ? (
+              <p className="text-green-600">Healthy</p>
+            ) : (
+              <p className="text-destructive">Unhealthy</p>
+            )}
+          </CardContent>
+        </Card>
       </section>
 
       <section aria-labelledby="errand-pipeline-title">
