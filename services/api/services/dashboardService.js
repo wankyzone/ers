@@ -76,6 +76,52 @@ export async function getTotalClients() {
   return countRows('profiles', [{ method: 'eq', args: ['role', 'client'] }]);
 }
 
+export async function getRevenue() {
+  // Sum platform commission (price - payout_amount) for finalized errands.
+  // Only confirmed errands with released escrow are counted.
+  // If payout_amount is null, use 80% convention (price * 0.2 commission).
+  const { data, error } = await supabase
+    .from('errands')
+    .select('price, payout_amount')
+    .eq('status', 'confirmed')
+    .eq('escrow_status', 'released');
+
+  if (error) {
+    throw new Error(`Failed to fetch revenue data: ${error.message}`);
+  }
+
+  if (!data || data.length === 0) {
+    return 0;
+  }
+
+  const revenue = (data ?? []).reduce((sum, errand) => {
+    const price = Number(errand.price ?? 0);
+    const payoutAmount = errand.payout_amount != null ? Number(errand.payout_amount) : Math.floor(price * 0.8);
+    const commission = price - payoutAmount;
+    return sum + commission;
+  }, 0);
+
+  return revenue;
+}
+
+export async function getWalletBalance() {
+  // Sum aggregate balance across all user wallets.
+  const { data, error } = await supabase
+    .from('wallets')
+    .select('balance');
+
+  if (error) {
+    throw new Error(`Failed to fetch wallet balance: ${error.message}`);
+  }
+
+  if (!data || data.length === 0) {
+    return 0;
+  }
+
+  const totalBalance = (data ?? []).reduce((sum, wallet) => sum + Number(wallet.balance ?? 0), 0);
+  return totalBalance;
+}
+
 function mapErrandEvent(event) {
   return {
     id: event.id,
@@ -141,7 +187,7 @@ export async function getRecentActivity(limit = RECENT_ACTIVITY_LIMIT) {
 }
 
 export async function getDashboardOverview() {
-  const [totalUsers, totalClients, totalRunners, activeClients, openErrands, pendingKycReviews, recentActivity, errandPipeline] =
+  const [totalUsers, totalClients, totalRunners, activeClients, openErrands, pendingKycReviews, recentActivity, errandPipeline, revenue, walletBalance] =
     await Promise.all([
       getTotalUsers(),
       getTotalClients(),
@@ -151,6 +197,8 @@ export async function getDashboardOverview() {
       getPendingKycReviews(),
       getRecentActivity(),
       getErrandPipelineCounts(),
+      getRevenue(),
+      getWalletBalance(),
     ]);
 
   return {
@@ -162,6 +210,8 @@ export async function getDashboardOverview() {
       openErrands,
       pendingKycReviews,
       completedErrands: errandPipeline?.completed ?? 0,
+      revenue,
+      walletBalance,
       errandPipeline, // { created, accepted, completed, confirmed }
     },
     recentActivity,

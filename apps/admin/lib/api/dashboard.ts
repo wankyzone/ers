@@ -15,6 +15,8 @@ export interface DashboardStats {
   openErrands: number;
   pendingKycReviews: number;
   completedErrands: number;
+  revenue: number;
+  walletBalance: number;
   errandPipeline?: ErrandPipelineCounts;
 }
 
