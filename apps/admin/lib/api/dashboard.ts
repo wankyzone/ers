@@ -8,10 +8,13 @@ export interface ErrandPipelineCounts {
 }
 
 export interface DashboardStats {
+  totalUsers: number;
+  totalClients: number;
   totalRunners: number;
   activeClients: number;
   openErrands: number;
   pendingKycReviews: number;
+  completedErrands: number;
   errandPipeline?: ErrandPipelineCounts;
 }
 

@@ -67,6 +67,15 @@ export async function getPendingKycReviews() {
   return pending.length;
 }
 
+export async function getTotalUsers() {
+  return countRows('users');
+}
+
+export async function getTotalClients() {
+  // Count accounts that are marked as client in the profiles table
+  return countRows('profiles', [{ method: 'eq', args: ['role', 'client'] }]);
+}
+
 function mapErrandEvent(event) {
   return {
     id: event.id,
@@ -132,8 +141,10 @@ export async function getRecentActivity(limit = RECENT_ACTIVITY_LIMIT) {
 }
 
 export async function getDashboardOverview() {
-  const [totalRunners, activeClients, openErrands, pendingKycReviews, recentActivity, errandPipeline] =
+  const [totalUsers, totalClients, totalRunners, activeClients, openErrands, pendingKycReviews, recentActivity, errandPipeline] =
     await Promise.all([
+      getTotalUsers(),
+      getTotalClients(),
       getTotalRunners(),
       getActiveClients(),
       getOpenErrands(),
@@ -144,10 +155,13 @@ export async function getDashboardOverview() {
 
   return {
     stats: {
+      totalUsers,
+      totalClients,
       totalRunners,
       activeClients,
       openErrands,
       pendingKycReviews,
+      completedErrands: errandPipeline?.completed ?? 0,
       errandPipeline, // { created, accepted, completed, confirmed }
     },
     recentActivity,
