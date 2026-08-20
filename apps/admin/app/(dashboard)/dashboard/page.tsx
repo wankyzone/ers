@@ -37,21 +37,35 @@ function formatActivityMessage(activity: Record<string, unknown>) {
 export default function DashboardPage() {
   const api = useApi();
   const { data, error, isLoading } = useAsync(() => getDashboardOverview(api));
-  const { data: health, error: healthError, isLoading: healthLoading } = useAsync(() => getSystemHealth(api));
+  const {
+    data: health,
+    error: healthError,
+    isLoading: healthLoading,
+  } = useAsync(() => getSystemHealth(api));
 
   const stats = data?.stats ?? {
+    totalUsers: 0,
+    totalClients: 0,
     totalRunners: 0,
     activeClients: 0,
     openErrands: 0,
     pendingKycReviews: 0,
+    completedErrands: 0,
+    revenue: 0,
+    walletBalance: 0,
   };
 
   const metrics = useMemo(
     () => [
+      { label: "Total Users", value: stats.totalUsers.toString() },
+      { label: "Total Clients", value: stats.totalClients.toString() },
       { label: "Total Runners", value: stats.totalRunners.toString() },
       { label: "Active Clients", value: stats.activeClients.toString() },
       { label: "Open Errands", value: stats.openErrands.toString() },
       { label: "Pending KYC Reviews", value: stats.pendingKycReviews.toString() },
+      { label: "Completed Errands", value: stats.completedErrands.toString() },
+      { label: "Revenue", value: stats.revenue.toString() },
+      { label: "Wallet Balance", value: stats.walletBalance.toString() },
     ],
     [stats],
   );
