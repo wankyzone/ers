@@ -19,6 +19,7 @@ import adminRoutes from "./routes/admin.js";
 import dashboardRouter from './routes/dashboard.js';
 import adminSettingsRoutes from './routes/adminSettings.js';
 import adminRunnersRoutes from './routes/adminRunners.js';
+import adminErrandsRoutes from './routes/adminErrands.js';
 import storageRoutes from './routes/storage.js';
 
 import './jobs/escrow.js';
@@ -132,6 +133,7 @@ app.use('/api/admin/kyc', adminKycRoutes);
 app.use('/api/admin/dashboard', dashboardRouter);
 app.use('/api/admin/settings', adminSettingsRoutes);
 app.use('/api/admin/runners', adminRunnersRoutes);
+app.use('/api/admin/errands', adminErrandsRoutes);
 
 app.use((req, res) => {
   res.status(404).json({

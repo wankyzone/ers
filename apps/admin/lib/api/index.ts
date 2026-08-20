@@ -1,6 +1,7 @@
 export * from "./auth";
 export * from "./client";
 export * from "./config";
+export * from "./errands";
 export * from "./errors";
 export * from "./kyc";
 export * from "./request";

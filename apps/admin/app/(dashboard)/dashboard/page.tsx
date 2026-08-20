@@ -83,6 +83,47 @@ export default function DashboardPage() {
         ))}
       </section>
 
+      <section aria-labelledby="errand-pipeline-title">
+        <h2 id="errand-pipeline-title">Errand Pipeline</h2>
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Created</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p>{stats.errandPipeline?.created ?? 0}</p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Accepted</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p>{stats.errandPipeline?.accepted ?? 0}</p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Completed</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p>{stats.errandPipeline?.completed ?? 0}</p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Confirmed</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p>{stats.errandPipeline?.confirmed ?? 0}</p>
+            </CardContent>
+          </Card>
+        </div>
+      </section>
+
       <section aria-labelledby="recent-activity-title">
         <h2 id="recent-activity-title">Recent Activity</h2>
         <Card>

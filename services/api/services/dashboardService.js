@@ -25,9 +25,23 @@ export async function getTotalRunners() {
 }
 
 export async function getOpenErrands() {
+  // Count errands that are newly created or accepted (assigned).
+  // 'pending' is not used by errands routes; include 'accepted' to treat assigned work as open.
   return countRows('errands', [
-    { method: 'in', args: ['status', ['created', 'pending']] },
+    { method: 'in', args: ['status', ['created', 'accepted']] },
   ]);
+}
+
+export async function getErrandPipelineCounts() {
+  // Return counts for the canonical lifecycle stages: created -> accepted -> completed -> confirmed
+  const [created, accepted, completed, confirmed] = await Promise.all([
+    countRows('errands', [{ method: 'eq', args: ['status', 'created'] }]),
+    countRows('errands', [{ method: 'eq', args: ['status', 'accepted'] }]),
+    countRows('errands', [{ method: 'eq', args: ['status', 'completed'] }]),
+    countRows('errands', [{ method: 'eq', args: ['status', 'confirmed'] }]),
+  ]);
+
+  return { created, accepted, completed, confirmed };
 }
 
 export async function getActiveClients() {
@@ -118,13 +132,14 @@ export async function getRecentActivity(limit = RECENT_ACTIVITY_LIMIT) {
 }
 
 export async function getDashboardOverview() {
-  const [totalRunners, activeClients, openErrands, pendingKycReviews, recentActivity] =
+  const [totalRunners, activeClients, openErrands, pendingKycReviews, recentActivity, errandPipeline] =
     await Promise.all([
       getTotalRunners(),
       getActiveClients(),
       getOpenErrands(),
       getPendingKycReviews(),
       getRecentActivity(),
+      getErrandPipelineCounts(),
     ]);
 
   return {
@@ -133,6 +148,7 @@ export async function getDashboardOverview() {
       activeClients,
       openErrands,
       pendingKycReviews,
+      errandPipeline, // { created, accepted, completed, confirmed }
     },
     recentActivity,
   };
