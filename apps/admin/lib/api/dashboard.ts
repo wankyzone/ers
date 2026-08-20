@@ -27,9 +27,18 @@ export interface DashboardOverview {
   recentActivity: DashboardActivityItem[];
 }
 
+export interface SystemHealth {
+  status: "ok" | string;
+}
+
 interface DashboardOverviewResponse {
   success: boolean;
   data: DashboardOverview;
+}
+
+interface SystemHealthResponse {
+  success: boolean;
+  data: SystemHealth;
 }
 
 export async function getDashboardOverview(
@@ -37,6 +46,16 @@ export async function getDashboardOverview(
 ): Promise<DashboardOverview> {
   const response = await client.get<DashboardOverviewResponse>(
     "/api/admin/dashboard/overview",
+  );
+
+  return response.data;
+}
+
+export async function getSystemHealth(
+  client: ApiClient = apiClient,
+): Promise<SystemHealth> {
+  const response = await client.get<SystemHealthResponse>(
+    "/api/admin/dashboard/health",
   );
 
   return response.data;
