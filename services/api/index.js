@@ -21,6 +21,7 @@ import adminSettingsRoutes from './routes/adminSettings.js';
 import adminRunnersRoutes from './routes/adminRunners.js';
 import adminErrandsRoutes from './routes/adminErrands.js';
 import storageRoutes from './routes/storage.js';
+import { getApiHealth } from './modules/health.js';
 
 import './jobs/escrow.js';
 
@@ -46,9 +47,7 @@ app.get('/', (_req, res) => {
 });
 
 app.get('/health', (_req, res) => {
-  res.json({
-    status: 'ok',
-  });
+  res.json(getApiHealth());
 });
 
 app.get('/wallet', async (req, res) => {
