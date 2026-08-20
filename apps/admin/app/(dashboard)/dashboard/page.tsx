@@ -46,6 +46,8 @@ export default function DashboardPage() {
     openErrands: 0,
     pendingKycReviews: 0,
     completedErrands: 0,
+    revenue: 0,
+    walletBalance: 0,
   };
 
   const metrics = useMemo(
@@ -57,6 +59,8 @@ export default function DashboardPage() {
       { label: "Open Errands", value: stats.openErrands.toString() },
       { label: "Pending KYC Reviews", value: stats.pendingKycReviews.toString() },
       { label: "Completed Errands", value: stats.completedErrands.toString() },
+      { label: "Revenue", value: stats.revenue.toString() },
+      { label: "Wallet Balance", value: stats.walletBalance.toString() },
     ],
     [stats],
   );
