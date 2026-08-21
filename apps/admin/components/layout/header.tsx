@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { useEffect, useMemo } from "react"
-import { usePathname } from "next/navigation"
+import { usePathname, useRouter } from "next/navigation"
 import {
   BellIcon,
   ChevronRightIcon,
@@ -51,6 +51,7 @@ function formatNotificationCount(count: number): string {
 
 export function Header({ onOpenMobileSidebar }: HeaderProps) {
   const pathname = usePathname() ?? ""
+  const router = useRouter()
   const api = useApi()
 
   const {
@@ -99,7 +100,7 @@ export function Header({ onOpenMobileSidebar }: HeaderProps) {
       <DropdownMenuLabel className="flex items-center justify-between gap-4">
         <span>Notifications</span>
         {activeAlertCount > 0 && (
-          <span className="rounded-full bg-destructive px-2 py-0.5 text-xs font-medium text-destructive-foreground">
+          <span className="rounded-full bg-amber-500 px-2 py-0.5 text-xs font-medium text-amber-950">
             {formatNotificationCount(activeAlertCount)}
           </span>
         )}
@@ -123,7 +124,7 @@ export function Header({ onOpenMobileSidebar }: HeaderProps) {
         notifications.map((notification) => (
           <DropdownMenuItem
             key={notification.id}
-            render={<Link href={notification.href} />}
+            onClick={() => router.push(notification.href)}
           >
             <div className="flex min-w-0 flex-col gap-1">
               <div className="flex items-center gap-2">
@@ -220,7 +221,7 @@ export function Header({ onOpenMobileSidebar }: HeaderProps) {
                     <BellIcon className="size-5" />
 
                     {activeAlertCount > 0 && (
-                      <span className="absolute -right-1 -top-1 flex min-h-4 min-w-4 items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-semibold leading-none text-destructive-foreground">
+                      <span className="absolute -right-1 -top-1 flex min-h-4 min-w-4 items-center justify-center rounded-full bg-amber-500 px-1 text-[10px] font-semibold leading-none text-amber-950">
                         {formatNotificationCount(activeAlertCount)}
                       </span>
                     )}
@@ -307,7 +308,7 @@ export function Header({ onOpenMobileSidebar }: HeaderProps) {
                     Notifications
 
                     {activeAlertCount > 0 && (
-                      <span className="flex min-h-4 min-w-4 items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-semibold leading-none text-destructive-foreground">
+                      <span className="flex min-h-4 min-w-4 items-center justify-center rounded-full bg-amber-500 px-1 text-[10px] font-semibold leading-none text-amber-950">
                         {formatNotificationCount(activeAlertCount)}
                       </span>
                     )}
