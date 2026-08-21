@@ -199,7 +199,7 @@ export async function getAnalyticsOverview({
     errandTrend,
     userGrowth,
   ] = await Promise.all([
-    countRows('users'),
+    countRows('profiles'),
     countRows('profiles', [
       { method: 'eq', args: ['role', 'client'] },
     ]),

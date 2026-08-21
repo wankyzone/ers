@@ -193,7 +193,7 @@ export default function AnalyticsPage() {
               <CardHeader>
                 <CardTitle>Success rate</CardTitle>
                 <CardDescription>
-                  Completed and confirmed errands relative to total errands.
+                  Confirmed errands relative to total errands.
                 </CardDescription>
               </CardHeader>
               <CardContent className="flex items-center gap-3">
