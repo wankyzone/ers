@@ -21,6 +21,7 @@ import adminSettingsRoutes from './routes/adminSettings.js';
 import adminRunnersRoutes from './routes/adminRunners.js';
 import adminErrandsRoutes from './routes/adminErrands.js';
 import adminClientsRoutes from './routes/adminClients.js';
+import adminAnalyticsRoutes from './routes/adminAnalytics.js';
 import storageRoutes from './routes/storage.js';
 import { getApiHealth } from './modules/health.js';
 
@@ -135,6 +136,7 @@ app.use('/api/admin/settings', adminSettingsRoutes);
 app.use('/api/admin/runners', adminRunnersRoutes);
 app.use('/api/admin/errands', adminErrandsRoutes);
 app.use('/api/admin/clients', adminClientsRoutes);
+app.use('/api/admin/analytics', adminAnalyticsRoutes);
 
 app.use((req, res) => {
   res.status(404).json({
