@@ -68,7 +68,7 @@ export async function getPendingKycReviews() {
 }
 
 export async function getTotalUsers() {
-  return countRows('users');
+  return countRows('profiles');
 }
 
 export async function getTotalClients() {
