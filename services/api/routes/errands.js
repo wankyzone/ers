@@ -2,19 +2,17 @@ import express from 'express';
 import supabase from '../supabase.js';
 import axios from 'axios';
 import crypto from 'crypto';
+import { authenticate, authorize } from '../modules/protect/index.js';
 
 const router = express.Router();
 
 /* ================= CREATE ERRAND ================= */
-router.post('/', async (req, res) => {
+router.post('/', authenticate, authorize('client'), async (req, res) => {
   try {
-    const clientId = req.headers['x-client-id'];
+    const clientId = req.user.id;
     const { title, description, price } = req.body;
 
     /* ===== VALIDATION ===== */
-    if (!clientId) {
-      return res.status(400).json({ error: "Missing client ID" });
-    }
 
     if (!title || !price || Number(price) <= 0) {
       return res.status(400).json({ error: "Invalid input" });
@@ -108,15 +106,12 @@ router.post('/', async (req, res) => {
 });
 
 /* ================= ACCEPT ================= */
-router.post('/:id/accept', async (req, res) => {
+router.post('/:id/accept', authenticate, authorize('runner'), async (req, res) => {
   try {
-    const runnerId = req.headers['x-runner-id'];
+    const runnerId = req.user.id;
     const { id } = req.params;
 
     /* ===== VALIDATION ===== */
-    if (!runnerId) {
-      return res.status(400).json({ error: "Missing x-runner-id" });
-    }
 
     /* ===== FETCH ERRAND ===== */
     const { data: errand, error: fetchError } = await supabase
@@ -162,15 +157,12 @@ router.post('/:id/accept', async (req, res) => {
 });
 
 /* ================= COMPLETE ================= */
-router.post('/:id/complete', async (req, res) => {
+router.post('/:id/complete', authenticate, authorize('runner'), async (req, res) => {
   try {
-    const runnerId = req.headers['x-runner-id'];
+    const runnerId = req.user.id;
     const { id } = req.params;
 
     /* ===== VALIDATION ===== */
-    if (!runnerId) {
-      return res.status(400).json({ error: "Missing x-runner-id" });
-    }
 
     /* ===== FETCH ERRAND ===== */
     const { data: errand, error: fetchError } = await supabase
@@ -225,15 +217,12 @@ router.post('/:id/complete', async (req, res) => {
 /* ================= CONFIRM (ESCROW RELEASE) ================= */
 // Fixed: removed requireAuth middleware, reads identity from headers
 // consistent with every other route in this file.
-router.post('/:id/confirm', async (req, res) => {
+router.post('/:id/confirm', authenticate, authorize('client'), async (req, res) => {
   try {
-    const clientId = req.headers['x-user-id'];
+    const clientId = req.user.id;
     const { id }   = req.params;
 
     // ── Validation ─────────────────────────────────────────────────────────
-    if (!clientId) {
-      return res.status(400).json({ error: 'Missing x-user-id header' });
-    }
 
     // ── Fetch errand ───────────────────────────────────────────────────────
     const { data: errand, error: fetchError } = await supabase
@@ -401,13 +390,13 @@ router.post('/paystack/withdraw', async (req, res) => {
 
 
 /* ================= GET ALL ERRANDS ================= */
-router.get('/', async (req, res) => {
+router.get('/', authenticate, async (req, res) => {
   try {
-    const user_id = req.headers['x-user-id'];
-    const role = req.headers['x-role']; // 'client' | 'runner'
+    const user_id = req.user.id;
+    const role = req.user.role;
 
-    if (!user_id || !role) {
-      return res.status(400).json({ error: 'Missing headers: x-user-id, x-role' });
+    if (!role) {
+      return res.status(403).json({ error: 'User role is unavailable' });
     }
 
     let query = supabase.from('errands').select('*');
@@ -559,8 +548,12 @@ router.post('/paystack/create-recipient', async (req, res) => {
   }
 });
 
-router.get('/transactions/:userId', async (req, res) => {
+router.get('/transactions/:userId', authenticate, async (req, res) => {
   const { userId } = req.params;
+
+  if (userId !== req.user.id) {
+    return res.status(403).json({ error: 'Unauthorized' });
+  }
 
   const { data, error } = await supabase
     .from('transactions')
@@ -573,8 +566,12 @@ router.get('/transactions/:userId', async (req, res) => {
   res.json(data);
 });
 
-router.get('/analytics/:userId', async (req, res) => {
+router.get('/analytics/:userId', authenticate, async (req, res) => {
   const { userId } = req.params;
+
+  if (userId !== req.user.id) {
+    return res.status(403).json({ error: 'Unauthorized' });
+  }
 
   const { data } = await supabase
     .from('transactions')
@@ -595,26 +592,49 @@ router.get('/analytics/:userId', async (req, res) => {
   });
 });
 
-router.post('/:id/dispute', async (req, res) => {
+router.post('/:id/dispute', authenticate, async (req, res) => {
   const { id } = req.params;
+  const userId = req.user.id;
 
-  await supabase
+  const { data: errand, error: fetchError } = await supabase
+    .from('errands')
+    .select('id, client_id, assigned_runner_id, escrow_status')
+    .eq('id', id)
+    .single();
+
+  if (fetchError || !errand) {
+    return res.status(404).json({ error: 'Errand not found' });
+  }
+
+  const isClient = errand.client_id === userId;
+  const isAssignedRunner = errand.assigned_runner_id === userId;
+
+  if (!isClient && !isAssignedRunner) {
+    return res.status(403).json({ error: 'Unauthorized' });
+  }
+
+  if (errand.escrow_status === 'released') {
+    return res.status(400).json({ error: 'Cannot dispute a released errand' });
+  }
+
+  const { error: updateError } = await supabase
     .from('errands')
     .update({
       escrow_status: 'under_review'
     })
     .eq('id', id);
 
-  res.json({ message: "Dispute opened" });
+  if (updateError) {
+    console.error('DISPUTE UPDATE ERROR:', updateError);
+    return res.status(500).json({ error: 'Failed to open dispute' });
+  }
+
+  res.json({ message: 'Dispute opened' });
 });
 
-router.get('/wallet', async (req, res) => {
+router.get('/wallet', authenticate, async (req, res) => {
   try {
-    const user_id = req.headers['x-user-id'];
-
-    if (!user_id) {
-      return res.status(400).json({ error: 'Missing user_id' });
-    }
+    const user_id = req.user.id;
 
     const { data, error } = await supabase
       .from('wallets')
@@ -642,8 +662,8 @@ router.get('/wallet', async (req, res) => {
   }
 });
 
-router.post('/withdraw', async (req, res) => {
-  const userId = req.headers['x-user-id'];
+router.post('/withdraw', authenticate, async (req, res) => {
+  const userId = req.user.id;
   const { amount, pin } = req.body;
 
   const user = await db.user.find(userId);
@@ -768,8 +788,8 @@ if (amount > 50000) {
   });
 });
 
-router.post('/verify-otp', async (req, res) => {
-  const userId = req.headers['x-user-id'];
+router.post('/verify-otp', authenticate, async (req, res) => {
+  const userId = req.user.id;
   const { code } = req.body;
 
   const otp = await db.otp.findLatest(userId);
