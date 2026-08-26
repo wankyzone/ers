@@ -662,8 +662,8 @@ router.get('/wallet', authenticate, async (req, res) => {
   }
 });
 
-router.post('/withdraw', async (req, res) => {
-  const userId = req.headers['x-user-id'];
+router.post('/withdraw', authenticate, async (req, res) => {
+  const userId = req.user.id;
   const { amount, pin } = req.body;
 
   const user = await db.user.find(userId);
@@ -788,8 +788,8 @@ if (amount > 50000) {
   });
 });
 
-router.post('/verify-otp', async (req, res) => {
-  const userId = req.headers['x-user-id'];
+router.post('/verify-otp', authenticate, async (req, res) => {
+  const userId = req.user.id;
   const { code } = req.body;
 
   const otp = await db.otp.findLatest(userId);
