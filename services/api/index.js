@@ -7,6 +7,7 @@ import http from 'http';
 import { Server } from 'socket.io';
 
 import errandsRouter from './routes/errands.js';
+import escrowReleaseRouter from './routes/escrowRelease.js';
 import transactionsRouter from './routes/transactions.js';
 import paystackRouter from './routes/paystack.js';
 import kycRouter from './routes/kyc.js';
@@ -113,6 +114,10 @@ app.post('/api/withdraw', (_req, res) => {
   });
 });
 
+// Atomic escrow release must be mounted before the legacy confirm route.
+app.use('/errands', escrowReleaseRouter);
+app.use('/api/errands', escrowReleaseRouter);
+
 app.use('/errands', errandsRouter);
 app.use('/transactions', transactionsRouter);
 app.use('/paystack', paystackRouter);
@@ -163,7 +168,7 @@ function listRoutes(router, prefix = '') {
   for (const layer of router.stack ?? []) {
     if (!layer.route) continue;
 
-    const routePath = `${prefix}${layer.route.path}`.replace(/\/+/g, '/');
+    const routePath = `${prefix}${layer.route.path}`.replace(/\\+/g, '/');
     const methods = Object.keys(layer.route.methods);
 
     methods.forEach((method) => {
@@ -182,6 +187,8 @@ function registeredRoutes() {
     'GET    /api/wallet',
     'POST   /withdraw',
     'POST   /api/withdraw',
+    ...listRoutes(escrowReleaseRouter, '/errands'),
+    ...listRoutes(escrowReleaseRouter, '/api/errands'),
     ...listRoutes(errandsRouter, '/errands'),
     ...listRoutes(errandsRouter, '/api/errands'),
     ...listRoutes(transactionsRouter, '/transactions'),
@@ -207,17 +214,17 @@ function registeredRoutes() {
   ].sort();
 }
 
-// ─── Server ──────────────────────
+// ─── Server ───────────────────────
 
 const server = http.createServer(app);
 
 // ─── Socket ──────────────────────
 
 const io = new Server(server, {
-  cors: { 
+  cors: {
     origin: '*',
     methods: ['GET', 'POST'],
-   },
+  },
 });
 
 io.on('connection', (socket) => {
