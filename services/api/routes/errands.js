@@ -14,94 +14,79 @@ router.post('/', authenticate, authorize('client'), async (req, res) => {
 
     /* ===== VALIDATION ===== */
 
-    if (!title || !price || Number(price) <= 0) {
-      return res.status(400).json({ error: "Invalid input" });
+    if (!title || price === undefined || price === null) {
+      return res.status(400).json({ error: 'Invalid input' });
     }
 
     const amount = Number(price);
-    const payout_amount = Math.floor(amount * 0.8);
 
-    /* ===== GET OR CREATE WALLET ===== */
-    let { data: wallet, error: walletError } = await supabase
-      .from('wallets')
-      .select('*')
-      .eq('user_id', clientId)
-      .single();
+    if (!Number.isFinite(amount) || amount <= 0 || !Number.isInteger(amount)) {
+      return res.status(400).json({ error: 'Invalid input' });
+    }
 
-    if (walletError || !wallet) {
-      const { data: newWallet, error: createWalletError } = await supabase
-        .from('wallets')
-        .insert([{
-          user_id: clientId,
-          balance: 0,
-          escrow_balance: 0
-        }])
-        .select()
-        .single();
+    /* ===== IDEMPOTENCY ===== */
 
-      if (createWalletError) {
-        console.log("WALLET CREATE ERROR:", createWalletError);
-        return res.status(500).json({ error: "Wallet creation failed" });
+    const idempotencyKey = req.get('Idempotency-Key');
+
+    if (!idempotencyKey || !idempotencyKey.trim()) {
+      return res.status(400).json({
+        error: 'Idempotency-Key header is required'
+      });
+    }
+
+    /* ===== ATOMIC ERRAND CREATION ===== */
+
+    const { data: errand, error } = await supabase.rpc(
+      'create_errand_atomic',
+      {
+        p_client_id: clientId,
+        p_title: title,
+        p_description: description ?? null,
+        p_price: amount,
+        p_idempotency_key: idempotencyKey.trim()
+      }
+    );
+
+    if (error) {
+      console.log('ATOMIC ERRAND ERROR:', error);
+
+      if (error.message?.includes('Insufficient balance')) {
+        return res.status(400).json({
+          error: 'Insufficient balance'
+        });
       }
 
-      wallet = newWallet;
+      if (error.message?.includes('Idempotency key already used')) {
+        return res.status(409).json({
+          error: 'Idempotency key already used with different request data'
+        });
+      }
+
+      if (error.message?.includes('required') ||
+          error.message?.includes('Invalid price')) {
+        return res.status(400).json({
+          error: error.message
+        });
+      }
+
+      return res.status(500).json({
+        error: 'Failed to create errand'
+      });
     }
 
-    /* ===== BALANCE CHECK ===== */
-    if ((wallet.balance || 0) < amount) {
-      return res.status(400).json({ error: "Insufficient balance" });
+    if (!errand) {
+      return res.status(500).json({
+        error: 'Errand creation returned no data'
+      });
     }
 
-    /* ===== MOVE MONEY TO ESCROW ===== */
-    const { error: updateError } = await supabase
-      .from('wallets')
-      .update({
-        balance: wallet.balance - amount,
-        escrow_balance: Number(wallet.escrow_balance || 0) + amount
-      })
-      .eq('user_id', clientId);
+    console.log('✅ ERRAND CREATED ATOMICALLY:', errand.id);
 
-    if (updateError) {
-      console.log("ESCROW UPDATE ERROR:", updateError);
-      return res.status(500).json({ error: "Failed to lock funds" });
-    }
-
-    /* ===== CREATE ERRAND ===== */
-    const { data: errand, error: errandError } = await supabase
-      .from('errands')
-      .insert([{
-        title,
-        description,
-        client_id: clientId,
-        price: amount,
-        payout_amount,
-        status: 'created',
-        escrow_status: 'locked',
-        escrow_locked_at: new Date()
-      }])
-      .select()
-      .single();
-
-    if (errandError) {
-      console.log("ERRAND CREATE ERROR:", errandError);
-      return res.status(500).json({ error: "Errand creation failed" });
-    }
-
-    /* ===== TRANSACTION LOG ===== */
-    await supabase.from('transactions').insert([{
-      user_id: clientId,
-      amount,
-      type: 'escrow_lock',
-      status: 'completed'
-    }]);
-
-    console.log("✅ ERRAND CREATED:", errand.id);
-
-    res.json(errand);
+    return res.json(errand);
 
   } catch (err) {
-    console.log("❌ CREATE ERRAND ERROR:", err);
-    res.status(500).json({ error: "Server error" });
+    console.log('❌ CREATE ERRAND ERROR:', err);
+    return res.status(500).json({ error: 'Server error' });
   }
 });
 
