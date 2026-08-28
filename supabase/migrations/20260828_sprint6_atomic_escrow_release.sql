@@ -8,11 +8,6 @@
 -- 4. Concurrent confirmations are serialized by row-level locks.
 -- 5. A release ledger entry is uniquely keyed per client + errand.
 
-CREATE UNIQUE INDEX IF NOT EXISTS transactions_user_id_escrow_release_key_key
-  ON public.transactions (user_id, idempotency_key)
-  WHERE user_id IS NOT NULL
-    AND idempotency_key IS NOT NULL;
-
 CREATE OR REPLACE FUNCTION public.release_escrow_atomic(
   p_client_id uuid,
   p_errand_id uuid

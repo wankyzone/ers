@@ -7,7 +7,6 @@ import http from 'http';
 import { Server } from 'socket.io';
 
 import errandsRouter from './routes/errands.js';
-import escrowReleaseRouter from './routes/escrowRelease.js';
 import transactionsRouter from './routes/transactions.js';
 import paystackRouter from './routes/paystack.js';
 import kycRouter from './routes/kyc.js';
@@ -114,10 +113,6 @@ app.post('/api/withdraw', (_req, res) => {
   });
 });
 
-// Atomic escrow release must be mounted before the legacy confirm route.
-app.use('/errands', escrowReleaseRouter);
-app.use('/api/errands', escrowReleaseRouter);
-
 app.use('/errands', errandsRouter);
 app.use('/transactions', transactionsRouter);
 app.use('/paystack', paystackRouter);
@@ -187,8 +182,6 @@ function registeredRoutes() {
     'GET    /api/wallet',
     'POST   /withdraw',
     'POST   /api/withdraw',
-    ...listRoutes(escrowReleaseRouter, '/errands'),
-    ...listRoutes(escrowReleaseRouter, '/api/errands'),
     ...listRoutes(errandsRouter, '/errands'),
     ...listRoutes(errandsRouter, '/api/errands'),
     ...listRoutes(transactionsRouter, '/transactions'),
