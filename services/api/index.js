@@ -163,7 +163,7 @@ function listRoutes(router, prefix = '') {
   for (const layer of router.stack ?? []) {
     if (!layer.route) continue;
 
-    const routePath = `${prefix}${layer.route.path}`.replace(/\/+/g, '/');
+    const routePath = `${prefix}${layer.route.path}`.replace(/\\+/g, '/');
     const methods = Object.keys(layer.route.methods);
 
     methods.forEach((method) => {
@@ -207,17 +207,17 @@ function registeredRoutes() {
   ].sort();
 }
 
-// ─── Server ──────────────────────
+// ─── Server ───────────────────────
 
 const server = http.createServer(app);
 
 // ─── Socket ──────────────────────
 
 const io = new Server(server, {
-  cors: { 
+  cors: {
     origin: '*',
     methods: ['GET', 'POST'],
-   },
+  },
 });
 
 io.on('connection', (socket) => {

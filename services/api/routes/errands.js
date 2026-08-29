@@ -199,124 +199,60 @@ router.post('/:id/complete', authenticate, authorize('runner'), async (req, res)
 });
 
 /* ================= CONFIRM (ESCROW RELEASE) ================= */
-/* ================= CONFIRM (ESCROW RELEASE) ================= */
-// Fixed: removed requireAuth middleware, reads identity from headers
-// consistent with every other route in this file.
 router.post('/:id/confirm', authenticate, authorize('client'), async (req, res) => {
   try {
     const clientId = req.user.id;
-    const { id }   = req.params;
+    const { id: errandId } = req.params;
 
-    // ── Validation ─────────────────────────────────────────────────────────
+    const { data, error } = await supabase.rpc('release_escrow_atomic', {
+      p_client_id: clientId,
+      p_errand_id: errandId,
+    });
 
-    // ── Fetch errand ───────────────────────────────────────────────────────
-    const { data: errand, error: fetchError } = await supabase
-      .from('errands')
-      .select('*')
-      .eq('id', id)
-      .single();
+    if (error) {
+      console.error('ATOMIC ESCROW RELEASE ERROR:', error);
 
-    if (fetchError || !errand) {
-      return res.status(404).json({ error: 'Errand not found' });
-    }
+      if (error.message?.includes('not found')) {
+        return res.status(404).json({ error: 'Errand not found' });
+      }
 
-    // ── Ownership check ────────────────────────────────────────────────────
-    if (errand.client_id !== clientId) {
-      return res.status(403).json({ error: 'Unauthorized: not your errand' });
-    }
+      if (error.message?.includes('Unauthorized')) {
+        return res.status(403).json({
+          error: 'Unauthorized: not your errand'
+        });
+      }
 
-    // ── State check ────────────────────────────────────────────────────────
-    // Original code checked for 'accepted' but complete route sets 'completed'
-    // + escrow_status 'awaiting_confirmation'. Correct gate is 'completed'.
-    if (errand.status !== 'completed' || errand.escrow_status !== 'awaiting_confirmation') {
-      return res.status(400).json({
-        error: `Cannot confirm: status=${errand.status}, escrow=${errand.escrow_status}`,
+      if (
+        error.message?.includes('Cannot release escrow') ||
+        error.message?.includes('assigned runner') ||
+        error.message?.includes('Insufficient escrow') ||
+        error.message?.includes('Invalid escrow') ||
+        error.message?.includes('Invalid runner payout')
+      ) {
+        return res.status(400).json({ error: error.message });
+      }
+
+      return res.status(500).json({
+        error: 'Failed to release escrow'
       });
     }
 
-    // ── Confirm errand ─────────────────────────────────────────────────────
-    const { data: updated, error: updateError } = await supabase
-      .from('errands')
-      .update({
-        status:        'confirmed',
-        escrow_status: 'released',
-        confirmed_at:  new Date(),
-      })
-      .eq('id', id)
-      .eq('status', 'completed')          // race-condition guard (same pattern as accept)
-      .eq('client_id', clientId)          // double-lock: only owner can confirm
-      .select()
-      .single();
-
-    if (updateError || !updated) {
-      return res.status(409).json({ error: 'Confirm failed (state may have changed)' });
+    if (!data) {
+      return res.status(500).json({
+        error: 'Escrow release returned no data'
+      });
     }
 
-    // ── Release escrow from client wallet ──────────────────────────────────
-    const amount = errand.budget ?? errand.price;
+    console.log(
+      '✅ ESCROW RELEASED ATOMICALLY:',
+      errandId,
+      'by client',
+      clientId
+    );
 
-    const { data: wallet, error: walletError } = await supabase
-      .from('wallets')
-      .select('escrow_balance')
-      .eq('user_id', clientId)
-      .single();
-
-    if (!walletError && wallet) {
-      await supabase
-        .from('wallets')
-        .update({
-          escrow_balance: Math.max(0, Number(wallet.escrow_balance || 0) - amount),
-        })
-        .eq('user_id', clientId);
-    }
-
-    // ── Credit runner wallet ───────────────────────────────────────────────
-    const runnerId = errand.assigned_runner_id;
-
-    if (runnerId) {
-      // Get or create runner wallet
-      let { data: runnerWallet } = await supabase
-        .from('wallets')
-        .select('available_balance, balance')
-        .eq('user_id', runnerId)
-        .single();
-
-      if (!runnerWallet) {
-        const { data: newWallet } = await supabase
-          .from('wallets')
-          .insert([{ user_id: runnerId, balance: 0, available_balance: 0 }])
-          .select()
-          .single();
-        runnerWallet = newWallet;
-      }
-
-      const payout = errand.payout_amount ?? Math.floor(amount * 0.8);
-
-      await supabase
-        .from('wallets')
-        .update({
-          available_balance: Number(runnerWallet.available_balance || 0) + payout,
-          balance:           Number(runnerWallet.balance || 0) + payout,
-        })
-        .eq('user_id', runnerId);
-    }
-
-    // ── Transaction log ────────────────────────────────────────────────────
-    await supabase.from('transactions').insert([{
-      type:      'release',
-      amount,
-      status:    'completed',
-      errand_id: id,
-      client_id: clientId,
-      runner_id: runnerId ?? null,
-    }]);
-
-    console.log('✅ ERRAND CONFIRMED:', id, 'by client', clientId);
-
-    return res.json(updated);
-
+    return res.json(data);
   } catch (err) {
-    console.log('❌ CONFIRM ERROR:', err);
+    console.error('ATOMIC ESCROW RELEASE SERVER ERROR:', err);
     return res.status(500).json({ error: 'Server error' });
   }
 });

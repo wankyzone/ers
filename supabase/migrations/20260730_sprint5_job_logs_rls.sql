@@ -1,2 +1,0 @@
-ALTER TABLE public.job_logs
-ENABLE ROW LEVEL SECURITY;
