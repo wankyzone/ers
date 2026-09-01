@@ -3,6 +3,7 @@ import supabase from '../supabase.js';
 import axios from 'axios';
 import crypto from 'crypto';
 import { authenticate, authorize } from '../modules/protect/index.js';
+import { getRunnerErrandVisibilityFilter } from '../utils/errandVisibility.js';
 
 const router = express.Router();
 
@@ -328,11 +329,12 @@ router.get('/', authenticate, async (req, res) => {
     }
 
     if (role === 'runner') {
-      // Runner sees:
-      // - unassigned errands
-      // - errands assigned to them
+      // Runner marketplace visibility:
+      // - unassigned errands in the 'created' state
+      // - their own active errands in the 'accepted' state
+      // - historical/completed/confirmed errands are excluded
       query = query.or(
-        `assigned_runner_id.is.null,assigned_runner_id.eq.${user_id}`
+        getRunnerErrandVisibilityFilter(user_id)
       );
     }
 
