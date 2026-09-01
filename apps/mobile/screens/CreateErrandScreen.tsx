@@ -24,6 +24,7 @@ import {
 
 import type { RootStackParamList } from '../src/navigation';
 import { createErrand, type ApiError } from '../src/services/api';
+import { generateIdempotencyKey } from '../src/utils/idempotency';
 
 // ─── TYPES ─────────────────────────
 
@@ -102,6 +103,8 @@ export default function CreateErrandScreen() {
 
   // ─── CREATE ─────────────────────
 
+  const createIdempotencyKeyRef = useRef<string | null>(null);
+
   const handleCreate = async () => {
     if (!isValid) {
       Alert.alert('Fill all fields correctly');
@@ -111,14 +114,23 @@ export default function CreateErrandScreen() {
     try {
       setLoading(true);
 
-      await createErrand({
-        title: title.trim(),
-        description: description.trim(),
-        pickup_location: pickup.trim(),
-        delivery_location: delivery.trim(),
-        price: parsedBudget,
-      });
+      const idempotencyKey =
+        createIdempotencyKeyRef.current ?? generateIdempotencyKey();
 
+      createIdempotencyKeyRef.current = idempotencyKey;
+
+      await createErrand(
+        {
+          title: title.trim(),
+          description: description.trim(),
+          pickup_location: pickup.trim(),
+          delivery_location: delivery.trim(),
+          price: parsedBudget,
+        },
+        idempotencyKey
+      );
+
+      createIdempotencyKeyRef.current = null;
       navigation.goBack();
     } catch (err) {
       Alert.alert('Error', (err as ApiError).message);

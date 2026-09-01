@@ -11,11 +11,23 @@ const router = express.Router();
 router.post('/', authenticate, authorize('client'), async (req, res) => {
   try {
     const clientId = req.user.id;
-    const { title, description, price } = req.body;
+    const {
+      title,
+      description,
+      pickup_location,
+      delivery_location,
+      price
+    } = req.body;
 
     /* ===== VALIDATION ===== */
 
-    if (!title || price === undefined || price === null) {
+    if (
+      !title?.trim() ||
+      !pickup_location?.trim() ||
+      !delivery_location?.trim() ||
+      price === undefined ||
+      price === null
+    ) {
       return res.status(400).json({ error: 'Invalid input' });
     }
 
@@ -43,6 +55,8 @@ router.post('/', authenticate, authorize('client'), async (req, res) => {
         p_client_id: clientId,
         p_title: title,
         p_description: description ?? null,
+        p_pickup_location: pickup_location.trim(),
+        p_delivery_location: delivery_location.trim(),
         p_price: amount,
         p_idempotency_key: idempotencyKey.trim()
       }

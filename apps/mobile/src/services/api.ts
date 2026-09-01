@@ -313,27 +313,34 @@ export const getClientErrands = async (): Promise<Errand[]> => {
  * createErrand
  *
  * Backend route: POST /  (errands.js ~line 10)
- * CRITICAL: backend reads x-client-id header, NOT x-user-id.
- * apiFetch injects x-user-id automatically. This function explicitly
- * adds x-client-id so the backend finds the client identity.
+ * Client identity comes from the authenticated Wanky Protect session
+ * on the backend. Do not send caller-supplied client identity headers.
+ * The request requires an Idempotency-Key for safe retry semantics.
  *
- * Body: { title, description, price }
- * Note: backend uses `price`, not `budget`. The CreateErrandScreen
- * should send `price` in the body, not `budget`.
+ * Body: {
+ *   title,
+ *   description,
+ *   pickup_location,
+ *   delivery_location,
+ *   price
+ * }
+ * Note: backend uses `price`, not `budget`. Pickup and delivery
+ * locations are persisted as explicit errand endpoints.
  */
-export const createErrand = async (payload: {
-  title: string;
-  description: string;
-  pickup_location?: string;
-  delivery_location?: string;
-  price: number;           // backend field — not `budget`
-}): Promise<Errand> => {
+export const createErrand = async (
+  payload: {
+    title: string;
+    description: string;
+    pickup_location: string;
+    delivery_location: string;
+    price: number;           // backend field — not `budget`
+  },
+  idempotencyKey: string
+): Promise<Errand> => {
   const { data, res } = await apiFetch<Errand & ApiMessageResponse>('/api/errands', {
     method: 'POST',
-    // Backend reads x-client-id — must be explicit because apiFetch
-    // only injects x-user-id, x-role, x-runner-id
     headers: {
-      'x-client-id': currentUser?.id ?? '',
+      'Idempotency-Key': idempotencyKey,
     },
     body: JSON.stringify(payload),
   });

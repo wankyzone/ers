@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -10,6 +10,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   useNavigation,
+  useFocusEffect,
   CompositeNavigationProp,
 } from '@react-navigation/native';
 import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
@@ -60,7 +61,7 @@ export default function ClientScreen() {
 
   // ─── Fetch ─────────────────────────────────────
 
-  const fetchErrands = async () => {
+  const fetchErrands = useCallback(async () => {
     if (!user?.id) return;
 
     try {
@@ -79,11 +80,9 @@ export default function ClientScreen() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [user?.id]);
 
-  useEffect(() => {
-    fetchErrands();
-  }, [user]);
+  useFocusEffect(fetchErrands);
 
   // ─── Active Errand ─────────────────────────────
 
