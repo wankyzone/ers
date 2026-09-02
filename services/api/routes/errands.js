@@ -97,48 +97,58 @@ router.post('/:id/accept', authenticate, authorize('runner'), async (req, res) =
     const runnerId = req.user.id;
     const { id } = req.params;
 
-    /* ===== VALIDATION ===== */
-
-    /* ===== FETCH ERRAND ===== */
-    const { data: errand, error: fetchError } = await supabase
-      .from('errands')
-      .select('*')
-      .eq('id', id)
-      .single();
-
-    if (fetchError || !errand) {
-      return res.status(404).json({ error: "Errand not found" });
+    if (!id) {
+      return res.status(400).json({ error: 'Errand ID is required' });
     }
 
-    /* ===== STATE CHECK ===== */
-    if (errand.status !== 'created') {
-      return res.status(400).json({ error: "Errand already taken" });
+    const { data, error } = await supabase.rpc('accept_errand_atomic', {
+      p_runner_id: runnerId,
+      p_errand_id: id,
+    });
+
+    if (error) {
+      console.log('❌ ACCEPT ERROR:', error);
+
+      const message = error.message || 'Failed to accept errand';
+
+      if (
+        message.includes('not found') ||
+        message.includes('no longer available')
+      ) {
+        return res.status(404).json({ error: message });
+      }
+
+      if (
+        message.includes('already has an active errand') ||
+        message.includes('already available') ||
+        message.includes('unavailable') ||
+        message.includes('not verified')
+      ) {
+        return res.status(409).json({ error: message });
+      }
+
+      if (
+        message.includes('Only runner accounts') ||
+        message.includes('Runner profile')
+      ) {
+        return res.status(403).json({ error: message });
+      }
+
+      return res.status(500).json({ error: 'Failed to accept errand' });
     }
 
-    /* ===== ACCEPT ERRAND ===== */
-    const { data: updated, error: updateError } = await supabase
-      .from('errands')
-      .update({
-        status: 'accepted',
-        assigned_runner_id: runnerId,
-        accepted_at: new Date()
-      })
-      .eq('id', id)
-      .eq('status', 'created') // 🔒 race condition guard
-      .select()
-      .single();
-
-    if (updateError || !updated) {
-      return res.status(409).json({ error: "Failed to accept (already taken)" });
+    if (!data) {
+      return res.status(409).json({
+        error: 'Failed to accept errand',
+      });
     }
 
-    console.log("✅ ERRAND ACCEPTED:", id, "by", runnerId);
+    console.log('✅ ERRAND ACCEPTED:', id, 'by', runnerId);
 
-    res.json(updated);
-
+    return res.json(data);
   } catch (err) {
-    console.log("❌ ACCEPT ERROR:", err);
-    res.status(500).json({ error: "Server error" });
+    console.log('❌ ACCEPT ERROR:', err);
+    return res.status(500).json({ error: 'Server error' });
   }
 });
 
