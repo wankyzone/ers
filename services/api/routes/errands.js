@@ -158,54 +158,51 @@ router.post('/:id/complete', authenticate, authorize('runner'), async (req, res)
     const runnerId = req.user.id;
     const { id } = req.params;
 
-    /* ===== VALIDATION ===== */
-
-    /* ===== FETCH ERRAND ===== */
-    const { data: errand, error: fetchError } = await supabase
-      .from('errands')
-      .select('*')
-      .eq('id', id)
-      .single();
-
-    if (fetchError || !errand) {
-      return res.status(404).json({ error: "Errand not found" });
+    if (!id) {
+      return res.status(400).json({ error: 'Errand ID is required' });
     }
 
-    /* ===== OWNERSHIP CHECK ===== */
-    if (errand.assigned_runner_id !== runnerId) {
-      return res.status(403).json({ error: "Not your job" });
+    const { data, error } = await supabase.rpc('complete_errand_atomic', {
+      p_runner_id: runnerId,
+      p_errand_id: id,
+    });
+
+    if (error) {
+      console.log('❌ COMPLETE ERROR:', error);
+
+      const message = error.message || 'Failed to complete errand';
+
+      if (message.includes('not found')) {
+        return res.status(404).json({ error: message });
+      }
+
+      if (message.includes('not assigned')) {
+        return res.status(403).json({ error: message });
+      }
+
+      if (
+        message.includes('current state') ||
+        message.includes('escrow is not in the expected state') ||
+        message.includes('completion failed')
+      ) {
+        return res.status(409).json({ error: message });
+      }
+
+      return res.status(500).json({ error: 'Failed to complete errand' });
     }
 
-    /* ===== STATE CHECK ===== */
-    if (errand.status !== 'accepted') {
-      return res.status(400).json({ error: "Invalid state (must be accepted)" });
+    if (!data) {
+      return res.status(409).json({
+        error: 'Failed to complete errand',
+      });
     }
 
-    /* ===== COMPLETE ERRAND ===== */
-    const { data: updated, error: updateError } = await supabase
-      .from('errands')
-      .update({
-        status: 'completed',
-        escrow_status: 'awaiting_confirmation',
-        completed_at: new Date()
-      })
-      .eq('id', id)
-      .eq('assigned_runner_id', runnerId)
-      .eq('status', 'accepted') // 🔒 race guard
-      .select()
-      .single();
+    console.log('✅ ERRAND COMPLETED ATOMICALLY:', id, 'by', runnerId);
 
-    if (updateError || !updated) {
-      return res.status(409).json({ error: "Failed to complete (state changed)" });
-    }
-
-    console.log("✅ ERRAND COMPLETED:", id, "by", runnerId);
-
-    res.json(updated);
-
+    return res.json(data);
   } catch (err) {
-    console.log("❌ COMPLETE ERROR:", err);
-    res.status(500).json({ error: "Server error" });
+    console.log('❌ COMPLETE ERROR:', err);
+    return res.status(500).json({ error: 'Server error' });
   }
 });
 
