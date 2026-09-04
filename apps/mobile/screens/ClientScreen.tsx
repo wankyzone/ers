@@ -48,9 +48,9 @@ const C = {
 // ─── Screen ─────────────────────────
 
 export default function ClientScreen() {
-  const { user } = useAuth();
+  const { user, accessToken } = useAuth();
   const navigation = useNavigation<NavProp>();
-  const socketRef = useSocket(API_URL);
+  const socketRef = useSocket(API_URL, accessToken);
 
   const [errands, setErrands] = useState<any[]>([]);
   const [runnerLocation, setRunnerLocation] = useState<any>(null);

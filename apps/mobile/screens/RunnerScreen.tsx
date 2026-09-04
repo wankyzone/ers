@@ -18,11 +18,11 @@ import {
 } from 'react-native';
 import * as Location from 'expo-location';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { io, Socket } from 'socket.io-client';
 
 import { useAuth } from '../src/context/AuthContext';
 import { DEBUG_API } from '../src/config/api';
 import { useApiDebugText } from '../src/hooks/useApiDebugText';
+import { useSocket } from '../src/hooks/useSocket';
 import {
   acceptErrand,
   getOpenErrands,
@@ -43,15 +43,12 @@ const C = {
   textSec: '#94a3b8',
 };
 
-// ─── SOCKET INSTANCE (singleton pattern) ───
-
-let socket: Socket | null = null;
-
 // ─── MAIN SCREEN ─────────────────────
 
 export default function RunnerScreen() {
-  const { user } = useAuth();
+  const { user, accessToken } = useAuth();
   const debugText = useApiDebugText();
+  const socketRef = useSocket(API_URL, accessToken);
 
   const [errands, setErrands] = useState<Errand[]>([]);
   const [loading, setLoading] = useState(true);
@@ -88,33 +85,34 @@ export default function RunnerScreen() {
   // ─── INIT SOCKET ─────────────────────
 
   useEffect(() => {
-    if (!user?.id) return;
+    const socket = socketRef.current;
 
-    socket = io(API_URL, {
-      transports: ['websocket'],
-      auth: {
-        userId: user.id,
-        role: user.role,
-      },
-    });
+    if (!socket) {
+      setConnected(false);
+      return;
+    }
 
-    socket.on('connect', () => {
+    const handleConnect = () => {
       setConnected(true);
       void fetchErrands();
-    });
+    };
 
-    socket.on('disconnect', () => {
+    const handleDisconnect = () => {
       setConnected(false);
-    });
+    };
 
-    // Initial authoritative bootstrap.
-    void fetchErrands();
+    socket.on('connect', handleConnect);
+    socket.on('disconnect', handleDisconnect);
+
+    if (socket.connected) {
+      handleConnect();
+    }
 
     return () => {
-      socket?.disconnect();
-      socket = null;
+      socket.off('connect', handleConnect);
+      socket.off('disconnect', handleDisconnect);
     };
-  }, [user?.id, fetchErrands]);
+  }, [socketRef, accessToken, fetchErrands]);
 
   // ─── LOCATION TRACKING ─────────────────
 
@@ -130,7 +128,7 @@ export default function RunnerScreen() {
         return;
       }
 
-      if (!socket?.connected) {
+      if (!socketRef.current?.connected) {
         setTracking(false);
         setTrackingError('Waiting for realtime connection...');
         return;
@@ -173,13 +171,13 @@ export default function RunnerScreen() {
                 return;
               }
 
-              if (!socket?.connected) {
+              if (!socketRef.current?.connected) {
                 setTracking(false);
                 setTrackingError('Realtime connection lost.');
                 return;
               }
 
-              socket.emit('location:update', {
+              socketRef.current.emit('location:update', {
                 errandId: activeErrand.id,
                 lat: latitude,
                 lng: longitude,
@@ -209,7 +207,7 @@ export default function RunnerScreen() {
       locationSubscription.current = null;
       setTracking(false);
     };
-  }, [activeErrand?.id, user?.id, connected]);
+  }, [activeErrand?.id, user?.id, connected, socketRef]);
 
   // ─── ACCEPT ERRAND (ATOMIC REST PATH) ───
 
