@@ -3,16 +3,39 @@ import assert from 'node:assert/strict';
 import http from 'node:http';
 import { io as createClient } from 'socket.io-client';
 
-import { initSocket } from '../server/socket.js';
+process.env.SUPABASE_URL ??= 'http://127.0.0.1:54321';
+process.env.SUPABASE_SERVICE_ROLE_KEY ??= 'test-placeholder-key';
+
+const { initSocket } = await import('../server/socket.js');
 
 const ERRAND_A = '00000000-0000-0000-0000-000000000401';
 const ERRAND_B = '00000000-0000-0000-0000-000000000402';
+const ACCESS_TOKEN = 'valid-access-token';
+
+const trustedUser = {
+  id: 'trusted-user-id',
+  email: 'trusted@example.com',
+  role: 'runner',
+};
+
+const protect = {
+  verifyAccessToken: async (accessToken) => ({
+    success: accessToken === ACCESS_TOKEN,
+    user: { id: 'wanky-protect-user-id' },
+    message: 'Invalid or expired access token.',
+  }),
+  getApplicationUser: async (userId) => ({
+    success: userId === 'wanky-protect-user-id',
+    user: trustedUser,
+    message: 'Application user not found.',
+  }),
+};
 
 const servers = new Set();
 
 async function createSocketServer() {
   const httpServer = http.createServer();
-  const io = initSocket(httpServer);
+  const io = initSocket(httpServer, protect);
 
   await new Promise((resolve) => {
     httpServer.listen(0, '127.0.0.1', resolve);
@@ -33,10 +56,11 @@ async function createSocketServer() {
   };
 }
 
-function connectClient(url) {
+function connectClient(url, auth = { accessToken: ACCESS_TOKEN }) {
   return new Promise((resolve, reject) => {
     const socket = createClient(url, {
       transports: ['websocket'],
+      auth,
     });
 
     const timeout = setTimeout(() => {
@@ -119,6 +143,39 @@ test('client receives runner location updates for its errand tracking room', asy
 
   client.disconnect();
   runner.disconnect();
+});
+
+test('valid access token authenticates a socket with the trusted user', async () => {
+  const { url, io } = await createSocketServer();
+
+  const client = await connectClient(url, {
+    accessToken: ACCESS_TOKEN,
+    userId: 'client-supplied-id',
+    role: 'admin',
+  });
+  const serverSocket = io.sockets.sockets.get(client.id);
+
+  assert.deepEqual(serverSocket.user, trustedUser);
+
+  client.disconnect();
+});
+
+test('missing access token is rejected', async () => {
+  const { url } = await createSocketServer();
+
+  await assert.rejects(
+    connectClient(url, {}),
+    (error) => error.message === 'Authentication required.'
+  );
+});
+
+test('invalid access token is rejected', async () => {
+  const { url } = await createSocketServer();
+
+  await assert.rejects(
+    connectClient(url, { accessToken: 'invalid-access-token' }),
+    (error) => error.message === 'Invalid or expired access token.'
+  );
 });
 
 test('location updates are isolated to the matching errand room', async () => {
