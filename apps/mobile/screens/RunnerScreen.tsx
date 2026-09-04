@@ -16,17 +16,22 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import * as Location from 'expo-location';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { io, Socket } from 'socket.io-client';
 
 import { useAuth } from '../src/context/AuthContext';
 import { DEBUG_API } from '../src/config/api';
 import { useApiDebugText } from '../src/hooks/useApiDebugText';
-import { Errand } from '../src/services/api';
+import {
+  acceptErrand,
+  getOpenErrands,
+  Errand,
+} from '../src/services/api';
 
 // ─── CONFIG ─────────────────────────
 
-const SOCKET_URL = 'https://YOUR_BACKEND_URL'; // replace
+const API_URL = process.env.EXPO_PUBLIC_API_URL ?? '';
 
 const C = {
   bg: '#020617',
@@ -52,15 +57,40 @@ export default function RunnerScreen() {
   const [loading, setLoading] = useState(true);
   const [acceptingId, setAcceptingId] = useState<string | null>(null);
   const [connected, setConnected] = useState(false);
+  const [tracking, setTracking] = useState(false);
+  const [trackingError, setTrackingError] = useState<string | null>(null);
+
+  const locationSubscription =
+    useRef<Location.LocationSubscription | null>(null);
 
   const acceptLock = useRef(false);
+
+  const fetchErrands = useCallback(async () => {
+    if (!user?.id) return;
+
+    try {
+      setLoading(true);
+      const data = await getOpenErrands();
+      setErrands(data);
+    } catch (error: any) {
+      console.error('Failed to fetch runner errands:', error);
+      setErrands([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [user?.id]);
+
+  const activeErrand = useMemo(
+    () => errands.find((errand) => errand.status === 'accepted'),
+    [errands]
+  );
 
   // ─── INIT SOCKET ─────────────────────
 
   useEffect(() => {
     if (!user?.id) return;
 
-    socket = io(SOCKET_URL, {
+    socket = io(API_URL, {
       transports: ['websocket'],
       auth: {
         userId: user.id,
@@ -70,67 +100,147 @@ export default function RunnerScreen() {
 
     socket.on('connect', () => {
       setConnected(true);
-      setLoading(false);
+      void fetchErrands();
     });
 
     socket.on('disconnect', () => {
       setConnected(false);
     });
 
-    // 🔥 REAL-TIME NEW ERRAND
-    socket.on('errand:new', (errand: Errand) => {
-      setErrands(prev => {
-        const exists = prev.some(e => e.id === errand.id);
-        if (exists) return prev;
-        return [errand, ...prev];
-      });
-    });
-
-    // 🔥 ERRAND REMOVED (accepted by another runner)
-    socket.on('errand:removed', (id: string) => {
-      setErrands(prev => prev.filter(e => e.id !== id));
-    });
-
-    // initial bootstrap
-    socket.emit('runner:join');
+    // Initial authoritative bootstrap.
+    void fetchErrands();
 
     return () => {
       socket?.disconnect();
       socket = null;
     };
-  }, [user?.id]);
+  }, [user?.id, fetchErrands]);
 
-  // ─── ACCEPT ERRAND (ATOMIC DISPATCH) ───
+  // ─── LOCATION TRACKING ─────────────────
 
-  const handleAccept = useCallback((id: string) => {
-    if (!socket || !user?.id) return;
-    if (acceptLock.current) return;
+  useEffect(() => {
+    let cancelled = false;
 
-    acceptLock.current = true;
-    setAcceptingId(id);
+    const startTracking = async () => {
+      if (!activeErrand || !user?.id) {
+        locationSubscription.current?.remove();
+        locationSubscription.current = null;
+        setTracking(false);
+        setTrackingError(null);
+        return;
+      }
 
-    socket.emit(
-      'errand:accept',
-      {
-        errandId: id,
-        runnerId: user.id,
-      },
-      (response: any) => {
-        acceptLock.current = false;
-        setAcceptingId(null);
+      if (!socket?.connected) {
+        setTracking(false);
+        setTrackingError('Waiting for realtime connection...');
+        return;
+      }
 
-        if (!response?.ok) {
-          Alert.alert('Failed', response?.message || 'Acceptance rejected');
+      try {
+        setTrackingError(null);
+
+        const { status } =
+          await Location.requestForegroundPermissionsAsync();
+
+        if (cancelled) return;
+
+        if (status !== Location.PermissionStatus.GRANTED) {
+          setTracking(false);
+          setTrackingError(
+            'Location permission is required for live tracking.'
+          );
           return;
         }
 
-        // optimistic removal
-        setErrands(prev => prev.filter(e => e.id !== id));
+        locationSubscription.current?.remove();
+
+        locationSubscription.current =
+          await Location.watchPositionAsync(
+            {
+              accuracy: Location.Accuracy.High,
+              timeInterval: 5000,
+              distanceInterval: 10,
+            },
+            (location) => {
+              if (cancelled) return;
+
+              const { latitude, longitude } = location.coords;
+
+              if (
+                !Number.isFinite(latitude) ||
+                !Number.isFinite(longitude)
+              ) {
+                return;
+              }
+
+              if (!socket?.connected) {
+                setTracking(false);
+                setTrackingError('Realtime connection lost.');
+                return;
+              }
+
+              socket.emit('location:update', {
+                errandId: activeErrand.id,
+                lat: latitude,
+                lng: longitude,
+              });
+
+              setTracking(true);
+              setTrackingError(null);
+            }
+          );
+      } catch (error: any) {
+        console.error('Location tracking error:', error);
+
+        if (!cancelled) {
+          setTracking(false);
+          setTrackingError(
+            error?.message || 'Unable to start location tracking.'
+          );
+        }
+      }
+    };
+
+    startTracking();
+
+    return () => {
+      cancelled = true;
+      locationSubscription.current?.remove();
+      locationSubscription.current = null;
+      setTracking(false);
+    };
+  }, [activeErrand?.id, user?.id, connected]);
+
+  // ─── ACCEPT ERRAND (ATOMIC REST PATH) ───
+
+  const handleAccept = useCallback(
+    async (id: string) => {
+      if (acceptLock.current) return;
+
+      acceptLock.current = true;
+      setAcceptingId(id);
+
+      try {
+        await acceptErrand(id);
+
+        // Reconcile with authoritative server state.
+        await fetchErrands();
 
         Alert.alert('Success', 'Errand assigned to you');
+      } catch (error: any) {
+        console.error('Accept errand failed:', error);
+
+        Alert.alert(
+          'Failed',
+          error?.message || 'Acceptance rejected'
+        );
+      } finally {
+        acceptLock.current = false;
+        setAcceptingId(null);
       }
-    );
-  }, [user?.id]);
+    },
+    [fetchErrands]
+  );
 
   // ─── UI HELPERS ─────────────────────
 
@@ -197,6 +307,18 @@ export default function RunnerScreen() {
         <Text style={{ color: 'white' }}>{debugText}</Text>
       )}
 
+      {activeErrand && (
+        <View style={trackingStyles.card}>
+          <Text style={trackingStyles.title}>Live Tracking</Text>
+
+          <Text style={trackingStyles.status}>
+            {tracking
+              ? 'Location sharing is active'
+              : trackingError || 'Waiting for location...'}
+          </Text>
+        </View>
+      )}
+
       <FlatList
         data={errands}
         keyExtractor={(i) => i.id}
@@ -253,6 +375,29 @@ const s = StyleSheet.create({
 
   empty: {
     color: C.textSec,
+  },
+});
+
+const trackingStyles = StyleSheet.create({
+  card: {
+    backgroundColor: C.card,
+    padding: 12,
+    borderRadius: 12,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: C.border,
+  },
+
+  title: {
+    color: C.textPri,
+    fontWeight: '700',
+    fontSize: 14,
+  },
+
+  status: {
+    color: C.textSec,
+    fontSize: 12,
+    marginTop: 4,
   },
 });
 

@@ -4,7 +4,6 @@ import './env.js';
 import express from 'express';
 import cors from 'cors';
 import http from 'http';
-import { Server } from 'socket.io';
 
 import errandsRouter from './routes/errands.js';
 import transactionsRouter from './routes/transactions.js';
@@ -25,6 +24,7 @@ import adminAnalyticsRoutes from './routes/adminAnalytics.js';
 import adminNotificationsRoutes from './routes/adminNotifications.js';
 import storageRoutes from './routes/storage.js';
 import { getApiHealth } from './modules/health.js';
+import { initSocket } from './server/socket.js';
 
 import './jobs/escrow.js';
 
@@ -213,36 +213,7 @@ const server = http.createServer(app);
 
 // ─── Socket ──────────────────────
 
-const io = new Server(server, {
-  cors: {
-    origin: '*',
-    methods: ['GET', 'POST'],
-  },
-});
-
-io.on('connection', (socket) => {
-  console.log('⚡ Client connected');
-
-  socket.on('join:errand', (errandId) => {
-    socket.join(`errand:${errandId}`);
-  });
-
-  socket.on('location:update', ({ errandId, lat, lng }) => {
-    socket.to(`errand:${errandId}`).emit('location:update', {
-      lat,
-      lng,
-    });
-  });
-
-  // 🔥 WITHDRAWAL REALTIME
-  socket.on('join:user', (userId) => {
-    socket.join(`user:${userId}`);
-  });
-
-  socket.on('disconnect', () => {
-    console.log('❌ Disconnected');
-  });
-});
+const io = initSocket(server);
 
 // ─── Start ───────────────────────
 
