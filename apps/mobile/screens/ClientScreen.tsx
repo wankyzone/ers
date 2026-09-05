@@ -48,12 +48,15 @@ const C = {
 // ─── Screen ─────────────────────────
 
 export default function ClientScreen() {
-  const { user } = useAuth();
+  const { user, accessToken } = useAuth();
   const navigation = useNavigation<NavProp>();
-  const socketRef = useSocket(API_URL);
+  const socketRef = useSocket(API_URL, accessToken);
 
   const [errands, setErrands] = useState<any[]>([]);
   const [runnerLocation, setRunnerLocation] = useState<any>(null);
+  const [trackingConnected, setTrackingConnected] = useState(false);
+  const [lastLocationAt, setLastLocationAt] = useState<number | null>(null);
+  const [trackingClock, setTrackingClock] = useState(() => Date.now());
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -95,28 +98,83 @@ export default function ClientScreen() {
   // ─── Socket Tracking ───────────────────────────
 
   useEffect(() => {
-    if (!activeErrand) return;
-
     const socket = socketRef.current;
-    if (!socket) return;
 
-    socket.emit('join:errand', activeErrand.id);
+    if (!socket) {
+      setTrackingConnected(false);
+      setRunnerLocation(null);
+      setLastLocationAt(null);
+      return;
+    }
 
-    const handler = (data: any) => {
-      if (!data?.lat || !data?.lng) return;
+    const handleConnect = () => {
+      setTrackingConnected(true);
+
+      if (activeErrand?.id) {
+        socket.emit('join:errand', activeErrand.id);
+      }
+    };
+
+    const handleDisconnect = () => {
+      setTrackingConnected(false);
+    };
+
+    const handleLocationUpdate = (data: any) => {
+      const lat = Number(data?.lat);
+      const lng = Number(data?.lng);
+
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+        return;
+      }
+
+      if (lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+        return;
+      }
 
       setRunnerLocation({
-        latitude: data.lat,
-        longitude: data.lng,
+        latitude: lat,
+        longitude: lng,
       });
+
+      setLastLocationAt(Date.now());
     };
 
-    socket.on('location:update', handler);
+    socket.on('connect', handleConnect);
+    socket.on('disconnect', handleDisconnect);
+    socket.on('location:update', handleLocationUpdate);
+
+    if (socket.connected) {
+      handleConnect();
+    }
 
     return () => {
-      socket.off('location:update', handler);
+      socket.off('connect', handleConnect);
+      socket.off('disconnect', handleDisconnect);
+      socket.off('location:update', handleLocationUpdate);
     };
-  }, [activeErrand]);
+  }, [activeErrand?.id, socketRef]);
+
+  useEffect(() => {
+    if (!activeErrand?.id) {
+      setRunnerLocation(null);
+      setLastLocationAt(null);
+    }
+  }, [activeErrand?.id]);
+
+  useEffect(() => {
+    if (!activeErrand?.id || !lastLocationAt) {
+      return;
+    }
+
+    const timer = setInterval(() => {
+      setTrackingClock(Date.now());
+    }, 5000);
+
+    return () => clearInterval(timer);
+  }, [activeErrand?.id, lastLocationAt]);
+
+  const trackingStale =
+    !!lastLocationAt && trackingClock - lastLocationAt > 15000;
 
   // ─── Confirm ───────────────────────────────────
 
@@ -125,7 +183,7 @@ export default function ClientScreen() {
 
     try {
       await confirmErrand(id);
-await fetchErrands();
+      await fetchErrands();
     } catch (err: any) {
       console.error('Confirm failed:', err);
       setError(err.message || 'Failed to confirm');
@@ -178,6 +236,22 @@ await fetchErrands();
       {/* TRACKING */}
       {activeErrand && (
         <>
+          <View style={styles.trackingStatus}>
+            <Text style={styles.trackingStatusTitle}>
+              Live Tracking
+            </Text>
+
+            <Text style={styles.trackingStatusText}>
+              {!trackingConnected
+                ? 'Reconnecting to runner...'
+                : !runnerLocation
+                  ? 'Waiting for runner location...'
+                  : trackingStale
+                    ? 'Runner location is stale'
+                    : 'Runner location is live'}
+            </Text>
+          </View>
+
           <TrackingMap runnerLocation={runnerLocation} />
 
           <TouchableOpacity
@@ -254,6 +328,27 @@ const styles = StyleSheet.create({
   createBtnText: {
     color: '#fff',
     fontWeight: '700',
+  },
+
+  trackingStatus: {
+    backgroundColor: C.card,
+    padding: 12,
+    marginBottom: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: C.border,
+  },
+
+  trackingStatusTitle: {
+    color: C.textPri,
+    fontWeight: '700',
+    fontSize: 14,
+  },
+
+  trackingStatusText: {
+    color: C.textSec,
+    fontSize: 12,
+    marginTop: 4,
   },
 
   confirmBtn: {

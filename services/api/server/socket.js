@@ -1,29 +1,78 @@
-const { Server } = require('socket.io');
+import { Server } from 'socket.io';
+import {
+  verifyAccessToken,
+  getApplicationUser,
+} from '../modules/protect/index.js';
 
-let io;
+export function initSocket(
+  server,
+  protect = { verifyAccessToken, getApplicationUser }
+) {
+  const io = new Server(server, {
+    cors: {
+      origin: '*',
+      methods: ['GET', 'POST'],
+    },
+  });
 
-function init(server) {
-  io = new Server(server, {
-    cors: { origin: '*' },
+  io.use(async (socket, next) => {
+    try {
+      const accessToken = socket.handshake.auth?.accessToken;
+
+      if (!accessToken) {
+        return next(new Error('Authentication required.'));
+      }
+
+      const authResult = await protect.verifyAccessToken(accessToken);
+
+      if (!authResult.success) {
+        return next(new Error(authResult.message ?? 'Invalid access token.'));
+      }
+
+      const accountResult = await protect.getApplicationUser(
+        authResult.user.id
+      );
+
+      if (!accountResult.success) {
+        return next(
+          new Error(accountResult.message ?? 'Application user not found.')
+        );
+      }
+
+      socket.user = accountResult.user;
+      return next();
+    } catch (_error) {
+      return next(new Error('Authentication service unavailable.'));
+    }
   });
 
   io.on('connection', (socket) => {
-    console.log('User connected:', socket.id);
+    console.log('⚡ Client connected');
 
-    socket.on('join', (userId) => {
-      socket.join(userId);
+    socket.on('join:errand', (errandId) => {
+      if (!errandId) return;
+      socket.join(`errand:${errandId}`);
+    });
+
+    socket.on('location:update', ({ errandId, lat, lng }) => {
+      if (!errandId) return;
+
+      socket.to(`errand:${errandId}`).emit('location:update', {
+        lat,
+        lng,
+      });
+    });
+
+    // Withdrawal realtime
+    socket.on('join:user', (userId) => {
+      if (!userId) return;
+      socket.join(`user:${userId}`);
     });
 
     socket.on('disconnect', () => {
-      console.log('User disconnected');
+      console.log('❌ Disconnected');
     });
   });
-}
 
-function emitToUser(userId, event, data) {
-  if (io) {
-    io.to(userId).emit(event, data);
-  }
+  return io;
 }
-
-module.exports = { init, emitToUser };
