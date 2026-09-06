@@ -213,7 +213,27 @@ const server = http.createServer(app);
 
 // ─── Socket ──────────────────────
 
-const io = initSocket(server);
+const getErrand = async (errandId) => {
+  const { data: errand, error } = await supabase
+    .from('errands')
+    .select('id, client_id, assigned_runner_id')
+    .eq('id', errandId)
+    .single();
+
+  if (error) {
+    if (error.code === 'PGRST116') {
+      return null;
+    }
+
+    throw error;
+  }
+
+  return errand;
+};
+
+const io = initSocket(server, undefined, {
+  getErrand,
+});
 
 // ─── Start ───────────────────────
 
