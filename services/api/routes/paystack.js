@@ -224,7 +224,16 @@ router.get('/verify/:reference', authenticate, async (req, res) => {
       .eq('type', 'deposit')
       .single();
 
-    if (transactionError || !transaction) {
+    if (transactionError) {
+      console.error('Paystack transaction lookup error:', transactionError);
+
+      return res.status(500).json({
+        success: false,
+        message: 'Unable to retrieve payment transaction',
+      });
+    }
+
+    if (!transaction) {
       return res.status(404).json({
         success: false,
         message: 'Payment transaction not found',
@@ -429,12 +438,16 @@ router.post('/webhook', async (req, res) => {
         .eq('type', 'deposit')
         .single();
 
-      if (transactionError || !transaction) {
-        console.error(
-          'Paystack transaction not found:',
-          transactionError
-        );
+      if (transactionError) {
+        console.error('Paystack transaction lookup error:', transactionError);
 
+        return res.status(500).json({
+          success: false,
+          message: 'Unable to retrieve payment transaction',
+        });
+      }
+
+      if (!transaction) {
         return res.status(404).json({
           success: false,
           message: 'Payment transaction not found',

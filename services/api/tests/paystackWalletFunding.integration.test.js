@@ -390,7 +390,6 @@ test('failed Paystack payment leaves wallet and ledger unchanged', async () => {
 
 test('signed Paystack charge.success webhook credits wallet exactly once', async () => {
   const SECRET = 'paystack-test-secret';
-  const PORT = 43127;
 
   process.env.SUPABASE_URL = 'http://127.0.0.1:54321';
   process.env.SUPABASE_SERVICE_ROLE_KEY =
@@ -420,8 +419,11 @@ test('signed Paystack charge.success webhook credits wallet exactly once', async
   const server = http.createServer(app);
 
   await new Promise((resolve) => {
-    server.listen(PORT, '127.0.0.1', resolve);
+    server.listen(0, '127.0.0.1', resolve);
   });
+
+  const address = server.address();
+  const port = address.port;
 
   const payload = JSON.stringify({
     event: 'charge.success',
@@ -439,7 +441,7 @@ test('signed Paystack charge.success webhook credits wallet exactly once', async
 
   async function sendWebhook() {
     const response = await fetch(
-      `http://127.0.0.1:${PORT}/paystack/webhook`,
+      `http://127.0.0.1:${port}/paystack/webhook`,
       {
         method: 'POST',
         headers: {
