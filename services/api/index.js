@@ -33,12 +33,13 @@ import './jobs/escrow.js';
 const app = express();
 
 app.use(cors());
-app.use(express.json());
 
 app.use(
   '/paystack/webhook',
   express.raw({ type: 'application/json' })
 );
+
+app.use(express.json());
 
 // ─── Routes ──────────────────────
 

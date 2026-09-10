@@ -552,6 +552,12 @@ export const addBankAccount = async (payload: {
  * Call this during KYC or bank setup to get the recipient_code,
  * then store it alongside the bank account record.
  */
+export const verifyPaystackPayment = async (reference: string) => {
+  return apiFetch(`/paystack/verify/${encodeURIComponent(reference)}`, {
+    method: 'GET',
+  });
+};
+
 export const createPaystackRecipient = async (payload: {
   account_number: string;
   bank_code: string;
