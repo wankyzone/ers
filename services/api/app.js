@@ -1,0 +1,243 @@
+// Must be the first import: loads env vars before any module reads process.env.
+import './env.js';
+
+import express from 'express';
+import cors from 'cors';
+import http from 'http';
+
+import errandsRouter from './routes/errands.js';
+import transactionsRouter from './routes/transactions.js';
+import paystackRouter from './routes/paystack.js';
+import kycRouter from './routes/kyc.js';
+import pinRouter from './routes/pin.js';
+import banksRouter from './routes/banks.js';
+import otpRouter from './routes/otp.js';
+import supabase from './supabase.js';
+import adminKycRoutes from "./routes/adminKyc.js";
+import adminRoutes from "./routes/admin.js";
+import dashboardRouter from './routes/dashboard.js';
+import adminSettingsRoutes from './routes/adminSettings.js';
+import adminRunnersRoutes from './routes/adminRunners.js';
+import adminErrandsRoutes from './routes/adminErrands.js';
+import adminClientsRoutes from './routes/adminClients.js';
+import adminAnalyticsRoutes from './routes/adminAnalytics.js';
+import adminNotificationsRoutes from './routes/adminNotifications.js';
+import storageRoutes from './routes/storage.js';
+import { getApiHealth } from './modules/health.js';
+import { initSocket } from './server/socket.js';
+
+
+function listRoutes(router, prefix = '') {
+  const routes = [];
+
+  for (const layer of router.stack ?? []) {
+    if (!layer.route) continue;
+
+    const routePath = `${prefix}${layer.route.path}`.replace(/\+/g, '/');
+    const methods = Object.keys(layer.route.methods);
+
+    methods.forEach((method) => {
+      routes.push(`${method.toUpperCase().padEnd(6)} ${routePath}`);
+    });
+  }
+
+  return routes;
+}
+
+// ─── App ─────────────────────────
+
+export function createApiServer() {
+  const app = express();
+
+app.use(cors());
+
+app.use(
+  '/paystack/webhook',
+  express.raw({ type: 'application/json' })
+);
+
+app.use(express.json());
+
+// ─── Routes ──────────────────────
+
+app.get('/', (_req, res) => {
+  res.json({
+    name: 'ERS API',
+    status: 'running',
+  });
+});
+
+app.get('/health', (_req, res) => {
+  res.json(getApiHealth());
+});
+
+app.get('/wallet', async (req, res) => {
+  try {
+    const userId = req.headers['x-user-id'];
+
+    if (!userId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Missing x-user-id header',
+      });
+    }
+
+    const { data, error } = await supabase
+      .from('wallets')
+      .select('*')
+      .eq('user_id', userId)
+      .single();
+
+    if (error && error.code !== 'PGRST116') {
+      console.log('Wallet fetch error:', error);
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to fetch wallet',
+      });
+    }
+
+    return res.json(data ?? {
+      balance: 0,
+      available_balance: 0,
+      escrow_balance: 0,
+    });
+  } catch (err) {
+    console.log('Wallet route error:', err);
+    return res.status(500).json({
+      success: false,
+      message: 'Server error',
+    });
+  }
+});
+
+app.get('/api/wallet', (req, res, next) => {
+  req.url = '/wallet';
+  return app.handle(req, res, next);
+});
+
+app.post('/withdraw', (_req, res) => {
+  res.json({
+    success: true,
+    message: 'Placeholder withdrawal endpoint',
+    requireOtp: false,
+  });
+});
+
+app.post('/api/withdraw', (_req, res) => {
+  res.json({
+    success: true,
+    message: 'Placeholder withdrawal endpoint',
+    requireOtp: false,
+  });
+});
+
+app.use('/errands', errandsRouter);
+app.use('/transactions', transactionsRouter);
+app.use('/paystack', paystackRouter);
+app.use('/kyc', kycRouter);
+app.use('/pin', pinRouter);
+app.use('/banks', banksRouter);
+app.use('/otp', otpRouter);
+app.use('/storage', storageRoutes);
+
+app.use('/api/errands', errandsRouter);
+app.use('/api/transactions', transactionsRouter);
+app.use('/api/paystack', paystackRouter);
+app.use('/api/kyc', kycRouter);
+app.use('/api/storage', storageRoutes);
+app.use('/api/pin', pinRouter);
+app.use('/api/banks', banksRouter);
+app.use('/api/otp', otpRouter);
+app.use('/api/admin', adminRoutes);
+app.use('/api/admin/kyc', adminKycRoutes);
+app.use('/api/admin/dashboard', dashboardRouter);
+app.use('/api/admin/settings', adminSettingsRoutes);
+app.use('/api/admin/runners', adminRunnersRoutes);
+app.use('/api/admin/errands', adminErrandsRoutes);
+app.use('/api/admin/clients', adminClientsRoutes);
+app.use('/api/admin/analytics', adminAnalyticsRoutes);
+app.use('/api/admin/notifications', adminNotificationsRoutes);
+
+app.use((req, res) => {
+  res.status(404).json({
+    success: false,
+    message: 'Route not found',
+    method: req.method,
+    path: req.originalUrl,
+  });
+});
+
+app.use((err, _req, res, _next) => {
+  console.error('Unhandled API error:', err);
+  res.status(err.status || 500).json({
+    success: false,
+    message: err.message || 'Internal server error',
+  });
+});
+
+
+  // ─── Server ───────────────────────
+
+  const server = http.createServer(app);
+
+  // ─── Socket ──────────────────────
+
+  const getErrand = async (errandId) => {
+    const { data: errand, error } = await supabase
+      .from('errands')
+      .select('id, client_id, assigned_runner_id')
+      .eq('id', errandId)
+      .single();
+
+    if (error) {
+      if (error.code === 'PGRST116') {
+        return null;
+      }
+
+      throw error;
+    }
+
+    return errand;
+  };
+
+  const io = initSocket(server, undefined, {
+    getErrand,
+  });
+  return {
+    app,
+    server,
+    io,
+  };
+}
+
+export function registeredRoutes() {
+  return [
+    'GET    /',
+    'GET    /health',
+    'GET    /wallet',
+    'GET    /api/wallet',
+    'POST   /withdraw',
+    'POST   /api/withdraw',
+    ...listRoutes(errandsRouter, '/errands'),
+    ...listRoutes(errandsRouter, '/api/errands'),
+    ...listRoutes(transactionsRouter, '/transactions'),
+    ...listRoutes(transactionsRouter, '/api/transactions'),
+    ...listRoutes(paystackRouter, '/paystack'),
+    ...listRoutes(paystackRouter, '/api/paystack'),
+    ...listRoutes(kycRouter, '/kyc'),
+    ...listRoutes(kycRouter, '/api/kyc'),
+    ...listRoutes(pinRouter, '/pin'),
+    ...listRoutes(pinRouter, '/api/pin'),
+    ...listRoutes(banksRouter, '/banks'),
+    ...listRoutes(banksRouter, '/api/banks'),
+    ...listRoutes(otpRouter, '/otp'),
+    ...listRoutes(otpRouter, '/api/otp'),
+    ...listRoutes(adminKycRoutes, '/admin/kyc'),
+    ...listRoutes(adminKycRoutes, '/api/admin/kyc'),
+    ...listRoutes(dashboardRouter, '/api/admin/dashboard'),
+    ...listRoutes(adminSettingsRoutes, '/api/admin/settings'),
+    ...listRoutes(adminRunnersRoutes, '/api/admin/runners'),
+    ...listRoutes(storageRoutes, '/storage'),
+    ...listRoutes(storageRoutes, '/api/storage'),
+  ].sort();
+}
