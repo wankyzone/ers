@@ -141,7 +141,8 @@ BEGIN
   -- 5. BALANCE CHECK
   -- ============================================================
 
-  IF COALESCE(v_wallet.balance, 0) < p_price THEN
+  IF COALESCE(v_wallet.balance, 0) < p_price
+     OR COALESCE(v_wallet.available_balance, 0) < p_price THEN
     RAISE EXCEPTION 'Insufficient balance';
   END IF;
 
@@ -160,6 +161,7 @@ BEGIN
   UPDATE public.wallets
   SET
     balance = COALESCE(balance, 0) - p_price,
+    available_balance = COALESCE(available_balance, 0) - p_price,
     escrow_balance = COALESCE(escrow_balance, 0) + p_price
   WHERE id = v_wallet.id;
 

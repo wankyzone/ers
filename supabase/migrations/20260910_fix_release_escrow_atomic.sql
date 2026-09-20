@@ -195,7 +195,8 @@ BEGIN
   UPDATE public.errands
   SET
     status = 'confirmed',
-    escrow_status = 'released'
+    escrow_status = 'released',
+    confirmed_at = COALESCE(confirmed_at, pg_catalog.now())
   WHERE id = p_errand_id
     AND client_id = p_client_id
     AND status = 'completed'

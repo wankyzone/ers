@@ -51,5 +51,9 @@ export async function runEscrowAutoRelease() {
   }
 }
 
-const escrowAutoReleaseInterval = setInterval(runEscrowAutoRelease, 60000);
-escrowAutoReleaseInterval.unref();
+
+export function startEscrowAutoReleaseScheduler() {
+  const interval = setInterval(runEscrowAutoRelease, 60000);
+  interval.unref();
+  return interval;
+}

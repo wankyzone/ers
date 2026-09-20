@@ -2,6 +2,7 @@ import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
+import '../env.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -392,8 +393,6 @@ test('signed Paystack charge.success webhook credits wallet exactly once', async
   const SECRET = 'paystack-test-secret';
 
   process.env.SUPABASE_URL = 'http://127.0.0.1:54321';
-  process.env.SUPABASE_SERVICE_ROLE_KEY =
-    process.env.SUPABASE_SERVICE_ROLE_KEY ?? '';
   process.env.PAYSTACK_SECRET_KEY = SECRET;
 
   const { default: express } = await import('express');
