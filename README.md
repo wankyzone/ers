@@ -235,14 +235,23 @@ pnpm test         # Run tests
 
 # Roadmap
 
-- ✅ Sprint 1
-- ✅ Sprint 2
-- ✅ Sprint 3
+## Engineering
+
+- ✅ Sprint 1 — Foundation
+- ✅ Sprint 2 — Core Platform Infrastructure
+- ✅ Sprint 3 — Core Marketplace Foundations
 - ✅ Sprint 4 — Authentication, Authorization & Runner Verification
-- 🚧 Sprint 5 — Admin Control Center
-- ⏳ Sprint 6 — Marketplace Engine
-- ⏳ Sprint 7 — Payments
-- ⏳ Sprint 8 — Notifications & Loyalty
+- ✅ Sprint 5 — Admin Control Center
+- ✅ Sprint 6 — Marketplace Engine & E2E Integration
+- 🔄 Release Validation — EAS build, environment/auth verification, recovery & deep-link validation, real-device UAT, stabilization
+- ⏳ Production Readiness — stable release candidate, app assets, final verification and launch gate
+
+## Launch & Growth
+
+- ⏳ Lagos Launch — December 2026
+- ⏳ ERS December Campaign — “WE DON'T WAIT.”
+- ⏳ Post-launch marketplace optimization
+- ⏳ 2027 Expansion — Uyo / Akwa Ibom
 
 ---
 
