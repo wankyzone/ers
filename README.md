@@ -106,16 +106,21 @@ Manage the entire marketplace from one dashboard.
 
 # Project Status
 
-| Module | Status |
-|---------|--------|
-| Authentication | ✅ Complete |
-| Authorization | ✅ Complete |
+| Area | Status |
+|------|--------|
+| Authentication & Authorization | ✅ Complete |
 | Runner Verification (KYC) | ✅ Complete |
-| Mobile App | 🚧 In Progress |
-| Admin Dashboard | 🚧 Sprint 5 |
-| Marketplace Engine | 🚧 Planned |
-| Payments | 🚧 Planned |
-| Notifications | 🚧 Planned |
+| Admin Control Center | ✅ Complete |
+| Marketplace Engine | ✅ Complete — Sprint 6 |
+| E2E Marketplace Integration | ✅ Complete |
+| Payments & Escrow | 🔄 Integrated — Release Validation |
+| Mobile App | 🔄 Release Validation |
+| Backend API | 🔄 Release Validation |
+| Supabase Environment & Auth Contract | 🔄 Validation |
+| Recovery & Deep Links | 🔄 Validation |
+| Real-Device UAT | ⏳ Pending |
+| Production Release | ⏳ Pending |
+| December Campaign | ⏳ Planned |
 
 ---
 
