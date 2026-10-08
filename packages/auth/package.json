@@ -9,7 +9,7 @@
     "dist"
   ],
   "scripts": {
-    "build": "tsc",
+    "build": "tsc --build --force",
     "clean": "rm -rf dist"
   }
 }
