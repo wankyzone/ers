@@ -27,7 +27,13 @@ export function createSupabaseClient(
 
 function getRequiredEnv(name: string): string {
   const value =
-    typeof process === "undefined" ? undefined : process.env[name];
+    typeof process === "undefined"
+      ? undefined
+      : name === "EXPO_PUBLIC_SUPABASE_URL"
+        ? process.env.EXPO_PUBLIC_SUPABASE_URL
+        : name === "EXPO_PUBLIC_SUPABASE_ANON_KEY"
+          ? process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY
+          : undefined;
 
   if (!value) {
     throw new Error(`${name} is required to initialize Supabase`);
