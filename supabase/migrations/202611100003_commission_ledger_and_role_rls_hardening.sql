@@ -115,17 +115,6 @@ $$;
 
 REVOKE ALL ON FUNCTION public.assert_financial_journal_balanced() FROM PUBLIC, anon, authenticated;
 
-DROP TRIGGER IF EXISTS financial_journal_entry_balance_check ON public.financial_journal_entries;
-CREATE CONSTRAINT TRIGGER financial_journal_entry_balance_check
-AFTER INSERT OR UPDATE ON public.financial_journal_entries
-DEFERRABLE INITIALLY DEFERRED
-FOR EACH ROW EXECUTE FUNCTION public.assert_financial_journal_balanced();
-
-DROP TRIGGER IF EXISTS financial_journal_line_balance_check ON public.financial_journal_lines;
-CREATE CONSTRAINT TRIGGER financial_journal_line_balance_check
-AFTER INSERT OR UPDATE ON public.financial_journal_lines
-DEFERRABLE INITIALLY DEFERRED
-FOR EACH ROW EXECUTE FUNCTION public.assert_financial_journal_balanced();
 
 ALTER TABLE public.platform_commission_entries ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON TABLE public.platform_commission_entries FROM PUBLIC, anon, authenticated;
@@ -215,6 +204,37 @@ WHERE j.source_type = 'errand_release'
 ON CONFLICT (journal_entry_id, account_code) DO NOTHING;
 
 
+
+-- Verify the historical backfill before enabling the deferred balance triggers.
+DO $
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM public.financial_journal_entries e
+    LEFT JOIN public.financial_journal_lines l
+      ON l.journal_entry_id = e.id
+    GROUP BY e.id, e.debit_total, e.credit_total
+    HAVING
+      COALESCE(pg_catalog.sum(l.amount) FILTER (WHERE l.side = 'debit'), 0) <> e.debit_total
+      OR COALESCE(pg_catalog.sum(l.amount) FILTER (WHERE l.side = 'credit'), 0) <> e.credit_total
+      OR e.debit_total <> e.credit_total
+  ) THEN
+    RAISE EXCEPTION 'Historical financial journal backfill is not balanced';
+  END IF;
+END;
+$;
+
+DROP TRIGGER IF EXISTS financial_journal_entry_balance_check ON public.financial_journal_entries;
+CREATE CONSTRAINT TRIGGER financial_journal_entry_balance_check
+AFTER INSERT OR UPDATE ON public.financial_journal_entries
+DEFERRABLE INITIALLY DEFERRED
+FOR EACH ROW EXECUTE FUNCTION public.assert_financial_journal_balanced();
+
+DROP TRIGGER IF EXISTS financial_journal_line_balance_check ON public.financial_journal_lines;
+CREATE CONSTRAINT TRIGGER financial_journal_line_balance_check
+AFTER INSERT OR UPDATE ON public.financial_journal_lines
+DEFERRABLE INITIALLY DEFERRED
+FOR EACH ROW EXECUTE FUNCTION public.assert_financial_journal_balanced();
 
 -- Quarantine invalid historical amounts for manual reconciliation.
 INSERT INTO public.platform_commission_reconciliation_exceptions (
