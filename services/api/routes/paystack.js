@@ -48,15 +48,11 @@ router.post('/resolve', async (req, res) => {
   return router.handle(req, res);
 });
 
-router.post('/recipient', async (req, res) => {
-  return res.json({
-    success: true,
-    message: 'Placeholder recipient created',
-    recipient_code: 'placeholder-recipient',
-    data: {
-      recipient_code: 'placeholder-recipient',
-      ...req.body,
-    },
+router.post('/recipient', authenticate, (_req, res) => {
+  return res.status(501).json({
+    success: false,
+    code: 'PAYOUT_SETUP_NOT_AVAILABLE',
+    message: 'Bank payout setup is not available yet.',
   });
 });
 
@@ -510,57 +506,45 @@ router.post('/webhook', async (req, res) => {
     ============================================================ */
 
     if (event.event === 'transfer.success') {
-      await supabase
-        .from('transactions')
-        .update({ status: 'completed' })
-        .eq('reference', event.data?.reference);
+      const reference = event.data?.reference;
+      if (!reference) {
+        return res.status(400).json({ success: false, message: 'Transfer reference is required' });
+      }
 
-      return res.json({
-        success: true,
-        message: 'Transfer processed',
+      const { data, error } = await supabase.rpc('settle_paystack_withdrawal_atomic', {
+        p_reference: reference,
+        p_outcome: 'completed',
       });
+
+      if (error || !data) {
+        console.error('Paystack transfer success settlement failed:', error);
+        return res.status(500).json({ success: false, message: 'Unable to settle transfer' });
+      }
+
+      return res.json({ success: true, message: 'Transfer processed' });
     }
 
     /* ============================================================
        5. TRANSFER FAILED
     ============================================================ */
 
-    if (event.event === 'transfer.failed') {
+    if (event.event === 'transfer.failed' || event.event === 'transfer.reversed') {
       const reference = event.data?.reference;
-
-      const { data: tx } = await supabase
-        .from('transactions')
-        .select('*')
-        .eq('reference', reference)
-        .single();
-
-      if (tx) {
-        const { data: wallet } = await supabase
-          .from('wallets')
-          .select('*')
-          .eq('user_id', tx.user_id)
-          .single();
-
-        if (wallet) {
-          await supabase
-            .from('wallets')
-            .update({
-              available_balance:
-                Number(wallet.available_balance || 0) + Number(tx.amount || 0),
-            })
-            .eq('user_id', tx.user_id);
-        }
-
-        await supabase
-          .from('transactions')
-          .update({ status: 'failed' })
-          .eq('id', tx.id);
+      if (!reference) {
+        return res.status(400).json({ success: false, message: 'Transfer reference is required' });
       }
 
-      return res.json({
-        success: true,
-        message: 'Transfer failure processed',
+      const { data, error } = await supabase.rpc('settle_paystack_withdrawal_atomic', {
+        p_reference: reference,
+        p_outcome: 'failed',
       });
+
+      if (error || !data) {
+        console.error('Paystack transfer failure settlement failed:', error);
+        return res.status(500).json({ success: false, message: 'Unable to settle failed transfer' });
+      }
+
+      return res.json({ success: true, message: 'Transfer failure processed' });
     }
 
     /* ============================================================
