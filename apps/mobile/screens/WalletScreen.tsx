@@ -57,10 +57,7 @@
  * wrong value.
  *
  * FIX: user.user_metadata?.role ?? 'client' everywhere.
- * apiFetch already injects x-role from currentUser.role (set via
- * setApiUser). If setApiUser receives the correct role, the apiFetch
- * header is already correct. The explicit headers passed here are
- * overrides — they should also use user_metadata.role.
+ * The backend resolves the application role from the protected profile.
  *
  * BUG 5 — addMoney uses Linking directly, no PaymentSuccess navigation
  * ─────────────────────────────────────────────────────────────────
@@ -130,8 +127,6 @@ export default function WalletScreen({ navigation }: Props) {
 
   const defaultBank = useMemo(() => banks.find((b) => b.is_default), [banks]);
 
-  // BUG 4 FIX: read role from user_metadata
-  const userRole: string = user?.user_metadata?.role ?? 'client';
 
   // ─── Fetch Wallet ─────────────────────────────────────────────────────────
 
@@ -146,9 +141,7 @@ export default function WalletScreen({ navigation }: Props) {
         opts.refreshing ? setRefreshing(true) : setLoading(true);
         setError(null);
 
-        const { data, res } = await apiFetch('/api/wallet', {
-          headers: { 'x-user-id': user.id, 'x-role': userRole },
-        });
+        const { data, res } = await apiFetch('/api/wallet');
 
         if (!data) { Alert.alert('Error', 'Invalid server response'); return; }
         if (!res.ok) throw new Error(data?.message);
@@ -165,7 +158,7 @@ export default function WalletScreen({ navigation }: Props) {
         setRefreshing(false);
       }
     },
-    [user, userRole]
+    [user]
   );
 
   // ─── Fetch Banks ──────────────────────────────────────────────────────────
@@ -201,7 +194,6 @@ export default function WalletScreen({ navigation }: Props) {
 
       const { data, res } = await apiFetch('/paystack/initialize', {
         method: 'POST',
-        headers: { 'x-user-id': user.id, 'x-role': userRole },
         body: JSON.stringify({
           email: user.email,
           amount: Number(amount),
