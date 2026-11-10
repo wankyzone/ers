@@ -76,7 +76,7 @@ const getAuthenticatedWallet = async (req, res) => {
   try {
     const { data, error } = await supabase
       .from('wallets')
-      .select('user_id, balance, available_balance, pending_balance, escrow_balance, created_at, updated_at')
+      .select('user_id, balance, available_balance, pending_balance, escrow_balance, created_at')
       .eq('user_id', req.user.id)
       .maybeSingle();
 
