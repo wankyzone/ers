@@ -267,54 +267,12 @@ router.post('/:id/confirm', authenticate, authorize('client'), async (req, res) 
 
 
 /* ================= WITHDRAW ================= */
-router.post('/paystack/withdraw', async (req, res) => {
-  const user_id = req.headers['x-runner-id'];
-  const { amount, recipient_code } = req.body;
-
-  const { data: wallet } = await supabase
-    .from('wallets')
-    .select('*')
-    .eq('user_id', user_id)
-    .single();
-
-  if (wallet.available_balance < amount) {
-    return res.status(400).json({ error: 'Insufficient balance' });
-  }
-
-  try {
-    const response = await axios.post(
-      'https://api.paystack.co/transfer',
-      {
-        source: 'balance',
-        amount: amount * 100,
-        recipient: recipient_code
-      },
-      {
-        headers: {
-          Authorization: `Bearer ${process.env.PAYSTACK_SECRET_KEY}`
-        }
-      }
-    );
-
-    await supabase
-  .from('wallets')
-  .update({
-    available_balance: wallet.available_balance - amount
-  })
-  .eq('user_id', user_id);
-
-    await supabase.from('transactions').insert([{
-      user_id,
-      amount,
-      type: 'withdraw',
-      status: 'pending',
-      reference: response.data.data.reference
-    }]);
-
-    res.json(response.data);
-  } catch (err) {
-    res.status(500).json({ error: 'Withdraw failed' });
-  }
+router.post('/paystack/withdraw', authenticate, authorize('runner'), (_req, res) => {
+  return res.status(501).json({
+    success: false,
+    code: 'WITHDRAWALS_NOT_AVAILABLE',
+    message: 'Withdrawals are temporarily unavailable while payout security is being completed.',
+  });
 });
 
 
@@ -361,30 +319,12 @@ router.get('/', authenticate, async (req, res) => {
 
 /* Paystack wallet funding is handled by routes/paystack.js. */
 
-router.post('/paystack/create-recipient', async (req, res) => {
-  const { account_number, bank_code, name } = req.body;
-
-  try {
-    const response = await axios.post(
-      'https://api.paystack.co/transferrecipient',
-      {
-        type: 'nuban',
-        name,
-        account_number,
-        bank_code,
-        currency: 'NGN'
-      },
-      {
-        headers: {
-          Authorization: `Bearer ${process.env.PAYSTACK_SECRET_KEY}`
-        }
-      }
-    );
-
-    res.json(response.data);
-  } catch (err) {
-    res.status(500).json({ error: 'Recipient failed' });
-  }
+router.post('/paystack/create-recipient', authenticate, authorize('runner'), (_req, res) => {
+  return res.status(501).json({
+    success: false,
+    code: 'PAYOUT_SETUP_NOT_AVAILABLE',
+    message: 'Bank payout setup is temporarily unavailable while payout security is being completed.',
+  });
 });
 
 router.get('/transactions/:userId', authenticate, async (req, res) => {
