@@ -334,6 +334,45 @@ test('escrow release confirms errand and moves funds exactly once', async () => 
   await cleanup();
 });
 
+
+test('escrow release rejects a stored runner payout outside the approved 80 percent split', async () => {
+  await cleanup();
+  await createUsers();
+  await createEscrowState();
+
+  await psql(`
+    UPDATE public.errands
+    SET payout_amount = 4500
+    WHERE id = '${IDS.errand}';
+  `);
+
+  await assert.rejects(
+    () => releaseEscrow(),
+    /Stored runner payout does not match the approved 80 percent split/
+  );
+
+  assert.equal(
+    await getErrandState(),
+    'completed|awaiting_confirmation',
+    'invalid payout must not finalize the errand'
+  );
+
+  assert.equal(
+    await getClientWallet(),
+    '0|0|5000',
+    'invalid payout must not debit client escrow'
+  );
+
+  assert.equal(
+    await getRunnerWallet(),
+    '0|0|0',
+    'invalid payout must not credit runner funds'
+  );
+
+  await cleanup();
+});
+
+
 after(async () => {
   await cleanup();
 });
