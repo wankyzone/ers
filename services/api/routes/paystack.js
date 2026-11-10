@@ -514,6 +514,7 @@ router.post('/webhook', async (req, res) => {
       const { data, error } = await supabase.rpc('settle_paystack_withdrawal_atomic', {
         p_reference: reference,
         p_outcome: 'completed',
+        p_provider_amount_kobo: Number(event.data?.amount),
       });
 
       if (error || !data) {
@@ -537,6 +538,7 @@ router.post('/webhook', async (req, res) => {
       const { data, error } = await supabase.rpc('settle_paystack_withdrawal_atomic', {
         p_reference: reference,
         p_outcome: 'failed',
+        p_provider_amount_kobo: Number(event.data?.amount),
       });
 
       if (error || !data) {
