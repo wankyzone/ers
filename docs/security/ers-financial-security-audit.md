@@ -85,7 +85,8 @@ The admin analytics and dashboard revenue values now read from the recognized co
 - Users can SELECT only their own profile.
 - A profile role change is rejected unless the request is executing under a trusted service-role context.
 - Runner access is granted only by the admin KYC approval endpoint through `approve_runner_kyc_atomic`.
-- The KYC RPC locks the pending application, validates required identity/bank evidence, and atomically marks KYC approved while promoting the profile to `runner`.
+- The KYC RPC locks the pending application, validates required identity/bank evidence, and atomically marks KYC approved, promotes the profile to `runner`, and provisions the operational `runners` record required by errand dispatch.
+- The mobile app refreshes its profile-derived role when returning to the foreground, so an approved runner does not have to trust stale signup metadata.
 - Admin roles are not created through public signup; existing admin accounts are preserved for separate account review.
 
 The mobile app now uses the shared Supabase auth client, no longer sends role metadata at signup, and resolves the app role from the RLS-protected profile. It does not create or upsert profiles from the client.
@@ -113,12 +114,14 @@ Client-facing database grants are restricted:
 - `services/api/routes/transactions.js`
 - `services/api/routes/storage.js`
 - `services/api/routes/kyc.js`
+- `services/api/routes/storage.js`
 - `services/api/services/kycService.js`
 - `services/api/services/analyticsService.js`
 - `services/api/services/dashboardService.js`
 - `apps/mobile/screens/AuthScreen.tsx`
 - `apps/mobile/screens/KycScreen.tsx`
 - `apps/mobile/src/providers/AuthProvider.tsx`
+- `apps/mobile/src/services/api.ts`
 - `apps/mobile/src/services/api.ts`
 
 ### Database
