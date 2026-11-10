@@ -65,7 +65,7 @@ ALTER TABLE public.financial_journal_entries ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.financial_journal_lines ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON TABLE public.financial_journal_entries, public.financial_journal_lines
   FROM PUBLIC, anon, authenticated;
-GRANT ALL ON TABLE public.financial_journal_entries, public.financial_journal_lines
+GRANT SELECT, INSERT ON TABLE public.financial_journal_entries, public.financial_journal_lines
   TO service_role;
 
 -- Deferred validation checks the final set of lines at transaction commit.
@@ -173,7 +173,7 @@ ON CONFLICT (journal_entry_id, account_code) DO NOTHING;
 
 ALTER TABLE public.platform_commission_entries ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON TABLE public.platform_commission_entries FROM PUBLIC, anon, authenticated;
-GRANT ALL ON TABLE public.platform_commission_entries TO service_role;
+GRANT SELECT, INSERT ON TABLE public.platform_commission_entries TO service_role;
 
 CREATE TABLE IF NOT EXISTS public.platform_commission_reconciliation_exceptions (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
