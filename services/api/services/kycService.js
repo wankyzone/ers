@@ -189,7 +189,7 @@ export async function rejectKyc(kycId, reason) {
   if (!["client", "runner"].includes(profile.role)) {
     return {
       success: false,
-      message: "Only runner accounts can be KYC reviewed.",
+      message: "Only client or runner accounts can submit KYC for runner approval.",
     };
   }
 
