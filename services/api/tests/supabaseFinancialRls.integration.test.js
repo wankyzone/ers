@@ -142,6 +142,23 @@ test('exactly one hardened signup trigger is bound to the auth profile function'
   assert.equal(count, '1');
 });
 
+test('profile, wallet, and errand policies contain only the intended access rules', async () => {
+  const policies = await psql(`
+    SELECT
+      (SELECT string_agg(policyname, ',') FROM pg_catalog.pg_policies
+       WHERE schemaname = 'public' AND tablename = 'profiles'),
+      (SELECT string_agg(policyname, ',') FROM pg_catalog.pg_policies
+       WHERE schemaname = 'public' AND tablename = 'wallets'),
+      (SELECT string_agg(policyname, ',') FROM pg_catalog.pg_policies
+       WHERE schemaname = 'public' AND tablename = 'errands');
+  `);
+
+  assert.equal(
+    policies,
+    'profiles_select_self|wallets_select_self|errands_select_participant_or_available'
+  );
+});
+
 test('privileged financial RPCs are not executable by anon or authenticated', async () => {
   const grants = await psql(`
     SELECT
