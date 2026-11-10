@@ -471,8 +471,23 @@ $$;
 
 REVOKE ALL ON FUNCTION public.handle_new_user() FROM PUBLIC, anon, authenticated;
 
--- Ensure the hardened function is actually bound to new Auth users.
-DROP TRIGGER IF EXISTS ers_handle_new_user_profile ON auth.users;
+-- Remove any previous trigger bound to this function, regardless of its legacy name.
+DO $
+DECLARE
+  v_trigger record;
+BEGIN
+  FOR v_trigger IN
+    SELECT tgname
+    FROM pg_catalog.pg_trigger
+    WHERE tgrelid = 'auth.users'::regclass
+      AND tgfoid = 'public.handle_new_user()'::regprocedure
+      AND NOT tgisinternal
+  LOOP
+    EXECUTE pg_catalog.format('DROP TRIGGER %I ON auth.users', v_trigger.tgname);
+  END LOOP;
+END;
+$;
+
 CREATE TRIGGER ers_handle_new_user_profile
 AFTER INSERT ON auth.users
 FOR EACH ROW
@@ -671,6 +686,11 @@ GRANT ALL ON TABLE public.profiles, public.wallets, public.transactions,
   public.jobs, public.job_logs, public.system_logs, public.orchestrator_retry_log,
   public.runners, public.audit_logs
 TO service_role;
+
+-- No public-schema RPC is exposed to browser/mobile roles. The API uses service_role.
+-- This also closes any legacy SECURITY DEFINER function that inherited broad
+-- default EXECUTE grants from the recovered schema.
+REVOKE EXECUTE ON ALL FUNCTIONS IN SCHEMA public FROM PUBLIC, anon, authenticated;
 
 -- Recovered default privileges granted all future public objects to client roles.
 -- Revoke those defaults so newly created tables/functions are not exposed by default.
