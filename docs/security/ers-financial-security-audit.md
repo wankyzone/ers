@@ -134,6 +134,20 @@ Client-facing database grants are restricted:
 - `services/api/tests/supabaseFinancialRls.integration.test.js`
 - Existing auth/escrow/payment test fixtures updated for server-created profiles and service-managed test roles.
 
+## ERS website integration finding
+
+The separate `wankyzone/ers-website` repository was inspected to answer whether this backend work automatically protects the current website.
+
+The current website is primarily a marketing/waitlist application. Its `app/api/errands/route.ts` is a mock endpoint: it logs a submitted task and returns a success-shaped response without creating an ERS errand or invoking the secured backend. The reviewed website code does not currently implement wallet, transaction, or Paystack flows against this backend.
+
+Therefore:
+- Any future web customer experience that calls this backend and uses the same Supabase project will inherit the API and RLS protections in this PR.
+- The existing marketing website is **not automatically connected** by this PR.
+- Before web-first customer launch, replace the mock errand endpoint with authenticated calls to the secured ERS API, use the same trusted profile-role model, and add web-specific integration tests.
+- Do not interpret the current mock endpoint's success response as a persisted errand.
+
+This website integration is a separate workstream and is not modified by this backend PR.
+
 ## Remaining production gates
 
 1. **Local database validation:** apply all three migrations to a disposable Supabase instance; verify function creation, deferred journal constraints, RLS, grants, and historical backfill.
