@@ -21,8 +21,8 @@ async function psql(sql) {
 
 async function cleanup() {
   await psql(`
-    DELETE FROM auth.users WHERE id = '${USER_ID}';
     DELETE FROM public.profiles WHERE id = '${USER_ID}';
+    DELETE FROM auth.users WHERE id = '${USER_ID}';
   `);
 }
 
