@@ -124,20 +124,7 @@ const apiMessage = (
   return data?.message ?? data?.error ?? fallback;
 };
 
-// Module-level user reference — set by AuthContext after login
-let currentUser: {
-  id: string;
-  role: string;
-  email?: string;
-} | null = null;
-
 let currentAccessToken: string | null = null;
-
-export const setApiUser = (
-  user: { id: string; role: string; email?: string } | null
-) => {
-  currentUser = user;
-};
 
 export const setApiAuthToken = (token: string | null) => {
   currentAccessToken = token;
@@ -246,10 +233,10 @@ export type BankAccount = {
  *   const { data, res } = await apiFetch('/api/wallet')
  *   if (!res.ok) throw new Error(data?.message)
  *
- * Auth headers injected automatically from currentUser (set via setApiUser):
- *   x-user-id, x-role, x-runner-id
+ * The only identity credential is the verified Supabase access token.
+ * User IDs and application roles are resolved by Wanky Protect on the server.
  *
- * Callers can override any header by passing options.headers.
+ * Callers may pass non-identity headers such as Idempotency-Key.
  */
 export async function apiFetch(
   path: string,
@@ -267,13 +254,6 @@ export async function apiFetch<TData = ApiMessageResponse | string | null>(
     ...options,
     headers: {
       'Content-Type': 'application/json',
-      ...(currentUser?.id
-        ? {
-            'x-user-id': currentUser.id,
-            'x-role': currentUser.role,
-            'x-runner-id': currentUser.id,
-          }
-        : {}),
       ...(currentAccessToken
         ? { Authorization: `Bearer ${currentAccessToken}` }
         : {}),
@@ -313,9 +293,7 @@ export const getClientErrands = async (): Promise<Errand[]> => {
  * createErrand
  *
  * Backend route: POST /  (errands.js ~line 10)
- * CRITICAL: backend reads x-client-id header, NOT x-user-id.
- * apiFetch injects x-user-id automatically. This function explicitly
- * adds x-client-id so the backend finds the client identity.
+ * Identity is derived by the backend from the verified access token.
  *
  * Body: { title, description, price }
  * Note: backend uses `price`, not `budget`. The CreateErrandScreen
@@ -330,11 +308,6 @@ export const createErrand = async (payload: {
 }): Promise<Errand> => {
   const { data, res } = await apiFetch<Errand & ApiMessageResponse>('/api/errands', {
     method: 'POST',
-    // Backend reads x-client-id — must be explicit because apiFetch
-    // only injects x-user-id, x-role, x-runner-id
-    headers: {
-      'x-client-id': currentUser?.id ?? '',
-    },
     body: JSON.stringify(payload),
   });
   if (!res.ok) throw new Error(apiMessage(data, 'Failed to create errand'));
@@ -345,7 +318,7 @@ export const createErrand = async (payload: {
  * confirmErrand
  *
  * Backend route: POST /:id/confirm  (errands.js ~line 130)
- * Reads: x-user-id header (injected by apiFetch automatically)
+ * Reads: authenticated identity from the Supabase access token
  * Releases escrow to runner and logs a 'release' transaction.
  */
 export const confirmErrand = async (id: string): Promise<{ success: boolean }> => {
@@ -381,7 +354,7 @@ export const getOpenErrands = async (): Promise<Errand[]> => {
  * acceptErrand
  *
  * Backend route: POST /:id/accept  (errands.js ~line 60)
- * Reads: x-runner-id header (injected by apiFetch automatically)
+ * Reads: authenticated runner identity from Wanky Protect
  * Updates errand status to 'accepted', sets assigned_runner_id.
  */
 export const acceptErrand = async (id: string): Promise<Errand> => {
@@ -396,7 +369,7 @@ export const acceptErrand = async (id: string): Promise<Errand> => {
  * completeErrand
  *
  * Backend route: POST /:id/complete  (errands.js ~line 95)
- * Reads: x-runner-id header
+ * Reads: authenticated runner identity from Wanky Protect
  * Updates errand status to 'completed', escrow_status to 'awaiting_confirmation'.
  */
 export const completeErrand = async (id: string): Promise<Errand> => {
@@ -431,7 +404,7 @@ export const getTransactions = async (userId: string): Promise<Transaction[]> =>
  * getWallet
  *
  * Backend route: GET /wallet  (errands.js ~line 410)
- * Reads: x-user-id header (injected by apiFetch)
+ * Reads: authenticated identity from Wanky Protect (injected by apiFetch)
  * Returns: { balance, available_balance, escrow_balance, ... }
  */
 export const getWallet = async (): Promise<{ balance: number; available_balance: number }> => {
@@ -448,8 +421,8 @@ export const getWallet = async (): Promise<{ balance: number; available_balance:
 /**
  * withdrawWithPin
  *
- * Backend route: POST /withdraw  (errands.js ~line 290)
- * Reads: x-user-id header (injected by apiFetch), body { amount, pin }
+ * Backend route: POST /api/withdraw
+ * Requires the authenticated session; currently returns unavailable (501).
  *
  * IMPORTANT — backend bug: the route computes `requireOtp` but the final
  * res.json({ success: true, message: 'Withdrawal processing' }) never
@@ -547,8 +520,7 @@ export const addBankAccount = async (payload: {
 /**
  * createPaystackRecipient — creates a Paystack transfer recipient.
  *
- * Backend route: POST /paystack/create-recipient  (errands.js ~line 395)
- * Required before initiating a Paystack transfer for withdrawal.
+ * Bank recipient creation is currently unavailable (501) until the payout workflow is complete.
  * Call this during KYC or bank setup to get the recipient_code,
  * then store it alongside the bank account record.
  */
