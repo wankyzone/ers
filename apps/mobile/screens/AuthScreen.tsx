@@ -27,7 +27,7 @@
  * - autoCapitalize / autoCorrect on TextInput
  * - loading-safe mode switch
  * - setLoading always in finally
- * - createProfile upsert after signup
+ * - profile creation is handled by the server-side Supabase Auth trigger
  */
 
 import React, { useState } from 'react';
