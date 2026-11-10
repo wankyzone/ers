@@ -732,23 +732,17 @@ USING (
 
 -- Remove broad client grants; explicitly grant only reads needed by client
 -- applications. All writes remain service-role/backend only.
-REVOKE ALL ON TABLE public.profiles, public.wallets, public.transactions,
-  public.payments, public.errands, public.errand_events, public.errand_logs,
-  public.users, public.kyc_profiles, public.otp_codes, public.user_devices,
-  public.jobs, public.job_logs, public.system_logs, public.orchestrator_retry_log,
-  public.runners, public.audit_logs
-FROM PUBLIC, anon, authenticated;
+-- Remove every inherited client grant from the exposed public schema,
+-- including tables added by older migrations (for example public.tasks).
+REVOKE ALL ON ALL TABLES IN SCHEMA public FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON ALL SEQUENCES IN SCHEMA public FROM PUBLIC, anon, authenticated;
 
 GRANT SELECT ON TABLE public.profiles, public.wallets, public.errands
 TO authenticated;
 
--- Service-role API remains the sole writer for the above tables.
-GRANT ALL ON TABLE public.profiles, public.wallets, public.transactions,
-  public.payments, public.errands, public.errand_events, public.errand_logs,
-  public.users, public.kyc_profiles, public.otp_codes, public.user_devices,
-  public.jobs, public.job_logs, public.system_logs, public.orchestrator_retry_log,
-  public.runners, public.audit_logs
-TO service_role;
+-- The backend service-role client is the only direct table writer.
+GRANT ALL ON ALL TABLES IN SCHEMA public TO service_role;
+GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO service_role;
 
 -- No public-schema RPC is exposed to browser/mobile roles. The API uses service_role.
 -- This also closes any legacy SECURITY DEFINER function that inherited broad
@@ -762,4 +756,13 @@ ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public
 ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public
   REVOKE ALL ON SEQUENCES FROM PUBLIC, anon, authenticated;
 ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public
+  REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC, anon, authenticated;
+
+-- Supabase-managed objects may also be created as supabase_admin. Harden that
+-- owner's defaults as well; changing only postgres defaults leaves a gap.
+ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin IN SCHEMA public
+  REVOKE ALL ON TABLES FROM PUBLIC, anon, authenticated;
+ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin IN SCHEMA public
+  REVOKE ALL ON SEQUENCES FROM PUBLIC, anon, authenticated;
+ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin IN SCHEMA public
   REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC, anon, authenticated;
