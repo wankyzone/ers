@@ -4,70 +4,106 @@
 **Repository:** `wankyzone/ers`  
 **Base:** `main` at `9b31d7211089a172e15e6b8fce512f75f3a725b7`  
 **Working branch:** `security/ers-financial-hardening`  
-**Commercial rule preserved:** ERS 20% / runner 80%
+**Commercial rule:** ERS 20% / runner 80%
 
 ## Executive summary
 
-The source review found several high-risk weaknesses in wallet identity, withdrawal authorization, placeholder financial endpoints, transfer settlement, and escrow payout validation. This branch applies fail-closed API changes and database-side atomic settlement controls.
+The source review identified weaknesses in wallet identity, withdrawals, transfer settlement, escrow payout validation, signup role assignment, profile policies, and default database privileges.
 
-**No production database was queried or modified.** The migrations in this branch have not been applied. Tests have been added but have not been executed in a local Supabase/Postgres environment from this GitHub-only session. Findings below are based on source inspection; exploitability has not been runtime-tested.
+The remediation now adds:
+- authenticated, identity-bound wallet reads;
+- fail-closed withdrawal and bank-payout endpoints until a complete safe payout workflow exists;
+- atomic, idempotent Paystack transfer settlement;
+- a commission subledger and balanced double-entry journal for every escrow release;
+- server-managed profile roles and KYC-based runner promotion;
+- restrictive RLS/table/function grants and safer default privileges;
+- regression tests for financial and authorization invariants.
+
+**No production database was queried or modified.** The new migrations have not been applied or executed in a local Supabase instance in this session. The findings about existing database policies are derived from the repository's recovered schema and security documentation, not a live catalog query.
+
+## Financial accounting design
+
+### Approved split
+
+For an errand with gross amount (G):
+- runner payout = `floor(G * 0.80)`;
+- ERS commission = `G - runner payout`;
+- invariant: `gross_amount = runner_amount + commission_amount`.
+
+This preserves the agreed 80% runner / 20% ERS economics, subject to integer-naira rounding.
+
+### Commission subledger
+
+`platform_commission_entries` records one immutable recognition record per released errand:
+- errand, client, runner;
+- gross amount, runner amount, ERS commission;
+- currency (NGN), recognition timestamp, source, and status.
+
+The unique errand key prevents duplicate recognition. Historical confirmed/released errands are backfilled using the actual stored payout amount. Where the legacy release logic used its 80% fallback for a null payout, the same fallback is used. Invalid historical records are quarantined in `platform_commission_reconciliation_exceptions`; the migration does not rewrite historical wallet balances or runner payouts.
+
+### Double-entry journal
+
+Each escrow release also posts a balanced journal entry with three account lines:
+
+| Account | Side | Amount |
+|---|---|---:|
+| Client escrow liability | Debit | Gross errand amount |
+| Runner wallet liability | Credit | Runner payout (80%) |
+| Platform commission revenue | Credit | ERS commission (20%) |
+
+The journal header enforces equal debit and credit totals. Deferred database triggers verify that the posted lines balance to the header at transaction commit. Commission recognition, runner wallet credit, escrow release, errand confirmation, and journal posting happen in the same database transaction.
+
+The admin analytics and dashboard revenue values now read from the recognized commission subledger rather than recalculating commission from errand rows.
+
+**Accounting boundary:** this recognizes ERS commission in the internal ledger; it does not itself transfer funds from Paystack to an ERS bank account. Provider settlement, cash reconciliation, and bank disbursement remain a separate treasury workflow.
 
 ## Findings and remediation
 
-| ID | Severity | Finding | Remediation in this branch |
+| ID | Severity | Finding | Remediation |
 |---|---|---|---|
-| FIN-01 | Critical | `GET /wallet` and `GET /api/wallet` trusted caller-supplied `x-user-id` while using the service-role client, allowing a caller to request another account's wallet. | Both routes now require Wanky Protect authentication and derive the wallet owner exclusively from `req.user.id`. Returned fields are explicitly selected. |
-| FIN-02 | Critical | `POST /errands/paystack/withdraw` trusted `x-runner-id`, used a read/check/transfer/write sequence, and had no atomic reservation or idempotency protection. | The route is authenticated and runner-authorized but deliberately returns HTTP 501. Root-level withdrawal placeholders also return 501. No new withdrawals are accepted until a complete atomic payout workflow exists. |
-| FIN-03 | High | Legacy `/errands/withdraw` referenced undefined dependencies and was not a trustworthy payout implementation. | Replaced with a fail-closed 501 response. Legacy OTP verification route is also disabled. |
-| FIN-04 | High | Recipient creation and bank-management placeholders could return success-shaped responses without securely persisting or binding bank details to the authenticated runner. | Recipient and bank mutation endpoints now fail closed with HTTP 501. Paystack account resolution requires authentication. |
-| FIN-05 | High | PIN set/verify trusted `x-user-id`; the four-digit PIN verification endpoint had no durable attempt limit or cooldown. OTP verification was a success-shaped placeholder. | PIN and OTP endpoints now fail closed with HTTP 501 (and require authentication/runner authorization where applicable) until step-up verification, durable throttling, and recovery controls are implemented. |
-| FIN-06 | High | Paystack transfer failure webhook performed a non-atomic read/modify/write wallet refund, so duplicate deliveries or concurrent events could double-refund. Transfer success updated a transaction without type/provider scoping. | Webhook settlement now calls `settle_paystack_withdrawal_atomic`, which locks the withdrawal ledger row, validates its type/provider and provider amount, and refunds exactly once on a failed transfer. |
-| FIN-07 | High | Escrow release trusted stored `payout_amount` with only a non-negative check; a corrupted value could exceed the errand price or depart from the approved split. | The new release migration enforces `floor(price * 0.8)` and fails closed for noncanonical stored payouts. Existing records are not silently rewritten; mismatches require manual review. |
-| FIN-08 | High | Dispute handling used a stale read followed by an unconditional update, which could overwrite a concurrent escrow release state. | Dispute update now uses an optimistic escrow-state predicate and returns HTTP 409 if the state changed before the update. |
-| FIN-09 | Medium | General transaction history route was an unauthenticated placeholder. | Replaced with authenticated, user-scoped transaction history and explicit response fields. |
-| FIN-10 | Medium | Bank and OTP placeholders implied functionality that did not exist. | Endpoints now explicitly report that the capability is unavailable rather than returning success. |
+| FIN-01 | Critical | `GET /wallet` and `GET /api/wallet` trusted caller-supplied `x-user-id` while using the service-role client. | Both require Wanky Protect authentication and derive ownership from `req.user.id`; response fields are explicitly selected. |
+| FIN-02 | Critical | Legacy Paystack withdrawal trusted `x-runner-id` and used a non-atomic read/check/transfer/write sequence. | Withdrawal endpoints return HTTP 501 and runner authorization is required on legacy routes. Do not re-enable before the full payout workflow is implemented. |
+| FIN-03 | High | Legacy withdrawal/OTP code referenced undefined dependencies or returned success-shaped placeholders. | Legacy implementations are replaced with explicit unavailable responses. |
+| FIN-04 | High | Recipient/bank setup placeholders did not establish secure bank ownership or durable recipient persistence. | Recipient and bank mutation endpoints fail closed with HTTP 501. Account resolution requires authentication. |
+| FIN-05 | High | PIN setup/verification trusted `x-user-id`; OTP verification was not a real challenge validation flow. | PIN/OTP endpoints fail closed until step-up authentication, durable attempt counters, cooldowns, delivery, and recovery are implemented. |
+| FIN-06 | High | Transfer failure webhook used a non-atomic wallet refund; transfer success did not sufficiently scope settlement. | Webhooks call `settle_paystack_withdrawal_atomic`, which locks the transaction, validates provider/type/reference/amount, and refunds a failed transfer once. |
+| FIN-07 | High | Escrow release trusted stored payout values without enforcing the agreed split. | Release validates `payout_amount = floor(price * 0.8)` and rejects mismatches for manual review. |
+| FIN-08 | High | Dispute update could overwrite a concurrently changed escrow state. | Optimistic state predicate prevents a stale dispute update from replacing a changed escrow state. |
+| FIN-09 | High | Signup trigger in recovered schema sourced profile role from client-controlled `raw_user_meta_data.role`. | New Auth users receive `client` regardless of signup metadata. Runner promotion is a service-role-only atomic KYC approval. |
+| FIN-10 | High | Recovered schema contained permissive profile INSERT policies, including `WITH CHECK (true)`. | Known permissive/overlapping policies are dropped. Client-side profile INSERT/UPDATE grants are removed; users may read only their own profile. |
+| FIN-11 | High | Recovered default privileges granted broad access to future public tables, sequences, and functions. | Default privileges are revoked for `PUBLIC`, `anon`, and `authenticated`; public-schema RPC execution is revoked from client roles. |
+| FIN-12 | High | Wallet, payment, errand, and operational tables had broad grants and/or incomplete RLS coverage in the recovered schema. | RLS is enabled across financial/identity/operational tables. Client grants are reduced to RLS-scoped SELECT on profiles, wallets, and errands. Financial writes remain backend/service-role only. |
+| FIN-13 | Medium | Transaction history was an unauthenticated placeholder. | Replaced with authenticated, user-scoped transaction history. |
+| FIN-14 | Medium | Analytics inferred platform revenue directly from errand price/payout fields. | Revenue metrics now read recognized commission ledger entries. |
 
-## Financial invariants now enforced by code
+## Database role and RLS policy
 
-1. Wallet reads through the API are scoped to the verified bearer-token identity.
-2. No withdrawal or bank-recipient mutation is accepted while the safe payout workflow is incomplete.
-3. Transfer settlement is keyed by provider reference and serialized by a database row lock.
-4. A failed transfer refunds the wallet once; duplicate failure events do not refund again.
-5. Transfer settlement rejects a provider amount that does not equal the ledger amount converted from naira to kobo.
-6. Escrow release rejects a stored runner payout that differs from the approved 80% calculation.
-7. A dispute cannot overwrite an escrow state that changed concurrently.
+### Signup and role assignment
 
-## Open risks / work required before production money movement
+- New users are always created as `client`, even if signup metadata requests `runner` or `admin`.
+- Client-side profile INSERT and UPDATE are not granted.
+- Users can SELECT only their own profile.
+- A profile role change is rejected unless the request is executing under a trusted service-role context.
+- Runner access is granted only by the admin KYC approval endpoint through `approve_runner_kyc_atomic`.
+- The KYC RPC locks the pending application, validates required identity/bank evidence, and atomically marks KYC approved while promoting the profile to `runner`.
+- Admin roles are not created through public signup; existing admin accounts are preserved for separate account review.
 
-### OPEN-01 — Platform commission accounting
+The mobile app now uses the shared Supabase auth client, no longer sends role metadata at signup, and resolves the app role from the RLS-protected profile. It does not create or upsert profiles from the client.
 
-The escrow release function removes the full errand price from client escrow and credits 80% to the runner. Revenue analytics infer the remaining 20% as `price - payout_amount`, but the reviewed release path does not create a distinct platform commission ledger entry or credit a platform settlement account.
+### Client table access
 
-This is an accounting-model gap, not something to patch by inventing a wallet row. Before live launch, define a system-owned platform account / double-entry ledger and reconcile it against escrow release transactions and Paystack settlement balances.
+RLS is enabled for:
+`profiles`, `wallets`, `transactions`, `payments`, `errands`, `errand_events`, `errand_logs`, `users`, `kyc_profiles`, `otp_codes`, `user_devices`, `jobs`, `job_logs`, `system_logs`, `orchestrator_retry_log`, `runners`, `audit_logs`, `platform_commission_entries`, `platform_commission_reconciliation_exceptions`, `financial_journal_entries`, and `financial_journal_lines`.
 
-### OPEN-02 — Withdrawals remain unavailable
-
-This PR intentionally disables withdrawal initiation, bank-recipient creation, PIN, and OTP verification. Re-enabling them requires a complete design with:
-- atomic balance reservation before contacting Paystack;
-- unique idempotency key and internal withdrawal record before provider calls;
-- authenticated runner ownership of the verified bank recipient;
-- KYC and risk/limit enforcement;
-- PIN step-up with durable attempt counters, cooldowns, and recovery;
-- safe handling of provider timeouts and unknown transfer states;
-- reconciliation for success, failure, reversal, and manual review.
-
-Do not re-enable a transfer endpoint by simply removing the 501 response.
-
-### OPEN-03 — Database role assignment and RLS verification
-
-The API's authorization middleware trusts the role stored in the application profile. Repository recovery documentation describes historical self-insert profile policies that may permit an authenticated user to create a profile with an elevated role if no profile row already exists. The effective production policy set and signup-trigger behavior must be verified against the current database before launch. This audit did not have access to a live Supabase policy catalog.
-
-### OPEN-04 — Production migration and runtime validation
-
-Apply migrations only after review in a disposable/local Supabase database, then run the existing escrow and Paystack integration suites plus the new withdrawal-settlement tests. Validate the actual Paystack webhook payloads for transfer success/failure and reconcile any pending legacy withdrawal references before deployment.
+Client-facing database grants are restricted:
+- `authenticated` can SELECT its own profile and wallet, and participant/available errands under RLS.
+- `anon` has no access to those financial/identity tables.
+- Client roles cannot directly INSERT/UPDATE wallets, transactions, payments, profiles, KYC records, or journal entries.
+- Client roles cannot execute public-schema RPCs; backend code uses the server-only service-role client.
 
 ## Files changed
 
+### API and mobile
 - `services/api/app.js`
 - `services/api/routes/errands.js`
 - `services/api/routes/paystack.js`
@@ -75,21 +111,45 @@ Apply migrations only after review in a disposable/local Supabase database, then
 - `services/api/routes/otp.js`
 - `services/api/routes/banks.js`
 - `services/api/routes/transactions.js`
+- `services/api/routes/kyc.js`
+- `services/api/services/kycService.js`
+- `services/api/services/analyticsService.js`
+- `services/api/services/dashboardService.js`
+- `apps/mobile/screens/AuthScreen.tsx`
+- `apps/mobile/screens/KycScreen.tsx`
+- `apps/mobile/src/providers/AuthProvider.tsx`
+
+### Database
 - `supabase/migrations/202611100001_financial_security_hardening.sql`
 - `supabase/migrations/202611100002_enforce_ers_runner_split.sql`
+- `supabase/migrations/202611100003_commission_ledger_and_role_rls_hardening.sql`
+
+### Tests
 - `services/api/tests/paystackWithdrawalSettlement.integration.test.js`
 - `services/api/tests/releaseEscrow.integration.test.js`
+- `services/api/tests/supabaseFinancialRls.integration.test.js`
+- Existing auth/escrow/payment test fixtures updated for server-created profiles and service-managed test roles.
+
+## Remaining production gates
+
+1. **Local database validation:** apply all three migrations to a disposable Supabase instance; verify function creation, deferred journal constraints, RLS, grants, and historical backfill.
+2. **Live read-only verification:** inspect the production `auth.users` trigger binding, effective policies, grants, default privileges, and migration history before any production apply.
+3. **Existing admin review:** confirm the identities that currently hold `admin` role; the migration intentionally does not demote existing admins automatically.
+4. **KYC data protection:** BVN and bank account details are still stored in `kyc_profiles`; field-level encryption/tokenization and retention controls remain necessary.
+5. **Treasury reconciliation:** reconcile recognized platform commission to actual Paystack settlement balances and ERS bank receipts.
+6. **Withdrawals:** remain disabled until atomic reservation, idempotency, verified recipient ownership, KYC/risk limits, PIN/OTP, unknown-state reconciliation, and reversal handling are implemented.
+7. **Runtime checks:** run API/mobile tests, a local migration reset, Paystack sandbox tests, and admin-dashboard UAT.
 
 ## Validation status
 
 - [x] Dedicated branch created from the inspected `main` commit.
-- [x] API source changes committed to the branch.
-- [x] Database migrations added to the branch; not applied.
-- [x] Regression tests added.
-- [ ] Node test suite executed.
-- [ ] Local Supabase migrations applied and verified.
-- [ ] Paystack sandbox transfer/webhook verification.
-- [ ] Live RLS/profile-role policy review.
-- [ ] Platform commission ledger design and reconciliation.
+- [x] Source changes and three forward migrations committed.
+- [x] Commission subledger and balanced journal added to escrow release.
+- [x] RLS/role hardening and regression tests added.
+- [ ] Node/API test suite executed.
+- [ ] Supabase migrations applied and verified locally.
+- [ ] Production RLS/grants/trigger inspected read-only.
+- [ ] Paystack sandbox transfer/webhook validation.
+- [ ] Production treasury reconciliation.
 
-**Release recommendation:** Keep withdrawals disabled and do not enable production money movement until OPEN-01 through OPEN-04 have been closed and the integration tests pass.
+**Release recommendation:** keep the PR in draft. Do not apply the migrations to production or enable withdrawals until the local test suite passes and the remaining production gates are closed.
