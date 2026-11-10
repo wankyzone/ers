@@ -1,83 +1,18 @@
 import express from 'express';
-import bcrypt from 'bcryptjs';
-import supabase from '../supabase.js';
 import { authenticate, authorize } from '../modules/protect/index.js';
 
 const router = express.Router();
 
-// ─── SET PIN ─────────────────────────────────────
-
-router.post('/set', authenticate, authorize('runner'), async (req, res) => {
-  const userId = req.user.id;
-  const { pin } = req.body;
-
-  if (typeof pin !== 'string' || !/^\d{4}$/.test(pin)) {
-    return res.status(400).json({ message: 'Invalid PIN' });
-  }
-
-  try {
-    const hashed = await bcrypt.hash(pin, 10);
-
-    const { error } = await supabase
-      .from('users')
-      .update({
-        withdrawal_pin: hashed,
-        pin_set: true,
-      })
-      .eq('id', userId);
-
-    if (error) {
-      throw error;
-    }
-
-    return res.json({ success: true });
-  } catch (err) {
-    console.error('SET PIN ERROR:', err.message);
-    return res.status(500).json({ message: 'Failed to set PIN' });
-  }
+// PIN operations remain unavailable until step-up authentication,
+// durable attempt counters, cooldowns, and recovery controls are implemented.
+const pinUnavailable = (_req, res) => res.status(501).json({
+  success: false,
+  code: 'WITHDRAWAL_PIN_NOT_AVAILABLE',
+  message: 'Withdrawal PIN setup and verification are temporarily unavailable while payout security is being completed.',
 });
 
-router.post('/create', authenticate, authorize('runner'), async (req, res) => {
-  req.url = '/set';
-  return router.handle(req, res);
-});
-
-// ─── VERIFY PIN ─────────────────────────────────
-
-router.post('/verify', authenticate, authorize('runner'), async (req, res) => {
-  const userId = req.user.id;
-  const { pin } = req.body;
-
-  if (typeof pin !== 'string' || !/^\d{4}$/.test(pin)) {
-    return res.status(400).json({ message: 'Missing fields' });
-  }
-
-  try {
-    const { data: user, error } = await supabase
-      .from('users')
-      .select('withdrawal_pin')
-      .eq('id', userId)
-      .single();
-
-    if (error || !user) {
-      return res.status(404).json({ message: 'User not found' });
-    }
-
-    if (!user.withdrawal_pin) {
-      return res.status(409).json({ message: 'Withdrawal PIN has not been set' });
-    }
-
-    const valid = await bcrypt.compare(pin, user.withdrawal_pin);
-
-    if (!valid) {
-      return res.status(401).json({ message: 'Incorrect PIN' });
-    }
-
-    return res.json({ success: true });
-  } catch (err) {
-    console.error('VERIFY PIN ERROR:', err.message);
-    return res.status(500).json({ message: 'PIN verification failed' });
-  }
-});
+router.post('/set', authenticate, authorize('runner'), pinUnavailable);
+router.post('/create', authenticate, authorize('runner'), pinUnavailable);
+router.post('/verify', authenticate, authorize('runner'), pinUnavailable);
 
 export default router;
