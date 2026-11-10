@@ -1,16 +1,17 @@
 import express from 'express';
 import bcrypt from 'bcryptjs';
 import supabase from '../supabase.js';
+import { authenticate } from '../modules/protect/index.js';
 
 const router = express.Router();
 
 // ─── SET PIN ─────────────────────────────────────
 
-router.post('/set', async (req, res) => {
-  const userId = req.headers['x-user-id'];
+router.post('/set', authenticate, async (req, res) => {
+  const userId = req.user.id;
   const { pin } = req.body;
 
-  if (!userId || !pin || pin.length !== 4) {
+  if (typeof pin !== 'string' || !/^\\d{4}$/.test(pin)) {
     return res.status(400).json({ message: 'Invalid PIN' });
   }
 
@@ -43,11 +44,11 @@ router.post('/create', async (req, res) => {
 
 // ─── VERIFY PIN ─────────────────────────────────
 
-router.post('/verify', async (req, res) => {
-  const userId = req.headers['x-user-id'];
+router.post('/verify', authenticate, async (req, res) => {
+  const userId = req.user.id;
   const { pin } = req.body;
 
-  if (!userId || !pin) {
+  if (typeof pin !== 'string' || !/^\\d{4}$/.test(pin)) {
     return res.status(400).json({ message: 'Missing fields' });
   }
 
@@ -60,6 +61,10 @@ router.post('/verify', async (req, res) => {
 
     if (error || !user) {
       return res.status(404).json({ message: 'User not found' });
+    }
+
+    if (!user.withdrawal_pin) {
+      return res.status(409).json({ message: 'Withdrawal PIN has not been set' });
     }
 
     const valid = await bcrypt.compare(pin, user.withdrawal_pin);
