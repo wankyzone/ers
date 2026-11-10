@@ -61,7 +61,7 @@ The admin analytics and dashboard revenue values now read from the recognized co
 
 | ID | Severity | Finding | Remediation |
 |---|---|---|---|
-| FIN-01 | Critical | `GET /wallet` and `GET /api/wallet` trusted caller-supplied `x-user-id` while using the service-role client. | Both require Wanky Protect authentication and derive ownership from `req.user.id`; response fields are explicitly selected. |
+| FIN-01 | Critical | `GET /wallet` and `GET /api/wallet` trusted caller-supplied `x-user-id` while using the service-role client. | Both require Wanky Protect authentication and derive ownership from `req.user.id`; response fields are explicitly selected. KYC document upload now also requires authentication and derives the storage owner from the verified profile. |
 | FIN-02 | Critical | Legacy Paystack withdrawal trusted `x-runner-id` and used a non-atomic read/check/transfer/write sequence. | Withdrawal endpoints return HTTP 501 and runner authorization is required on legacy routes. Do not re-enable before the full payout workflow is implemented. |
 | FIN-03 | High | Legacy withdrawal/OTP code referenced undefined dependencies or returned success-shaped placeholders. | Legacy implementations are replaced with explicit unavailable responses. |
 | FIN-04 | High | Recipient/bank setup placeholders did not establish secure bank ownership or durable recipient persistence. | Recipient and bank mutation endpoints fail closed with HTTP 501. Account resolution requires authentication. |
@@ -111,6 +111,7 @@ Client-facing database grants are restricted:
 - `services/api/routes/otp.js`
 - `services/api/routes/banks.js`
 - `services/api/routes/transactions.js`
+- `services/api/routes/storage.js`
 - `services/api/routes/kyc.js`
 - `services/api/services/kycService.js`
 - `services/api/services/analyticsService.js`
@@ -118,6 +119,7 @@ Client-facing database grants are restricted:
 - `apps/mobile/screens/AuthScreen.tsx`
 - `apps/mobile/screens/KycScreen.tsx`
 - `apps/mobile/src/providers/AuthProvider.tsx`
+- `apps/mobile/src/services/api.ts`
 
 ### Database
 - `supabase/migrations/202611100001_financial_security_hardening.sql`
