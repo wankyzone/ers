@@ -126,7 +126,6 @@ Client-facing database grants are restricted:
 
 ### Database
 - `supabase/migrations/202611100001_financial_security_hardening.sql`
-- `supabase/migrations/202611100002_enforce_ers_runner_split.sql`
 - `supabase/migrations/202611100003_commission_ledger_and_role_rls_hardening.sql`
 
 ### Tests
@@ -148,7 +147,7 @@ Client-facing database grants are restricted:
 ## Validation status
 
 - [x] Dedicated branch created from the inspected `main` commit.
-- [x] Source changes and three forward migrations committed.
+- [x] Source changes and two forward migrations committed.
 - [x] Commission subledger and balanced journal added to escrow release.
 - [x] RLS/role hardening and regression tests added.
 - [ ] Node/API test suite executed.
