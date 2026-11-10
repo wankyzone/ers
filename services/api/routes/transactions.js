@@ -6,8 +6,13 @@ const router = express.Router();
 
 // Never expose a shared transaction feed. Scope every read to the
 // authenticated account; privileged admin reporting uses separate routes.
-router.get('/', authenticate, async (req, res) => {
+const listOwnTransactions = async (req, res) => {
   try {
+    const requestedUserId = req.params.userId ?? req.user.id;
+    if (requestedUserId !== req.user.id) {
+      return res.status(403).json({ success: false, message: 'Unauthorized' });
+    }
+
     const { data, error } = await supabase
       .from('transactions')
       .select('id, amount, type, status, reference, created_at, errand_id')
@@ -24,6 +29,9 @@ router.get('/', authenticate, async (req, res) => {
     console.error('Transaction history error:', error);
     return res.status(500).json({ success: false, message: 'Unable to load transaction history' });
   }
-});
+};
+
+router.get('/', authenticate, listOwnTransactions);
+router.get('/:userId', authenticate, listOwnTransactions);
 
 export default router;
