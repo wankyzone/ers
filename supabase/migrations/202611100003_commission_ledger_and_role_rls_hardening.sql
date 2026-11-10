@@ -644,7 +644,7 @@ BEGIN
   ON CONFLICT (id) DO UPDATE
   SET
     name = EXCLUDED.name,
-    email = COALESCE(EXCLUDED.email, public.runners.email);
+    email = COALESCE(EXCLUDED.email, runners.email);
 
   RETURN v_profile;
 END;
