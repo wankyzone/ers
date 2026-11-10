@@ -92,7 +92,7 @@ test('runner role is granted only through trusted KYC approval', async () => {
 
 test('financial and identity tables have RLS enabled and client grants are least-privilege', async () => {
   const rlsEnabled = await psql(`
-    SELECT CASE WHEN bool_and(c.relrowsecurity) THEN 'true' ELSE 'false' END
+    SELECT count(*) || '|' || CASE WHEN bool_and(c.relrowsecurity) THEN 'true' ELSE 'false' END
     FROM pg_class c
     JOIN pg_namespace n ON n.oid = c.relnamespace
     WHERE n.nspname = 'public'
@@ -107,7 +107,7 @@ test('financial and identity tables have RLS enabled and client grants are least
       ]);
   `);
 
-  assert.equal(rlsEnabled, 'true');
+  assert.equal(rlsEnabled, '21|true');
 
   const privileges = await psql(`
     SELECT
