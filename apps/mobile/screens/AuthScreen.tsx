@@ -111,7 +111,6 @@ function InputField({
 
 export default function AuthScreen() {
   const [mode, setMode] = useState<'login' | 'signup'>('login');
-  const [role, setRole] = useState<'client' | 'runner'>('client');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -127,13 +126,6 @@ export default function AuthScreen() {
     return null;
   };
 
-  const createProfile = async (userId: string) => {
-    const { error } = await supabase.from('profiles').upsert(
-      { id: userId, role, created_at: new Date().toISOString() },
-      { onConflict: 'id' }
-    );
-    if (error) console.warn('[AuthScreen] createProfile error:', error.message);
-  };
 
   const handleAuth = async () => {
     const validationError = validate();
@@ -157,11 +149,8 @@ export default function AuthScreen() {
         const { data, error } = await supabase.auth.signUp({
           email: normalizedEmail,
           password,
-          options: { data: { role } },
         });
         if (error) throw error;
-
-        if (data.user) await createProfile(data.user.id);
 
         if (!data.session) {
           Alert.alert(
@@ -228,20 +217,9 @@ export default function AuthScreen() {
         />
 
         {mode === 'signup' && (
-          <View style={s.roleRow}>
-            {(['client', 'runner'] as const).map((r) => (
-              <TouchableOpacity
-                key={r}
-                style={[s.roleBtn, role === r && s.roleActive]}
-                onPress={() => setRole(r)}
-                disabled={loading}
-                accessibilityLabel={`Select role: ${r}`}
-                accessibilityState={{ selected: role === r }}
-              >
-                <Text style={s.roleText}>{r.toUpperCase()}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
+          <Text style={s.footer}>
+            New accounts start as clients. Runner access is enabled after verification and approval.
+          </Text>
         )}
 
         <TouchableOpacity
@@ -281,10 +259,6 @@ const s = StyleSheet.create({
     backgroundColor: C.bg, color: 'white', padding: 12,
     borderRadius: 10, borderWidth: 1, borderColor: C.border,
   },
-  roleRow: { flexDirection: 'row', gap: 10, marginBottom: 15 },
-  roleBtn: { flex: 1, padding: 12, borderRadius: 10, borderWidth: 1, borderColor: C.border, alignItems: 'center' },
-  roleActive: { backgroundColor: C.green, borderColor: C.green },
-  roleText: { color: 'white', fontWeight: '600' },
   cta: { backgroundColor: C.green, padding: 15, borderRadius: 12, alignItems: 'center', marginTop: 10 },
   ctaDisabled: { opacity: 0.6 },
   ctaText: { color: 'white', fontWeight: '700', fontSize: 16 },
