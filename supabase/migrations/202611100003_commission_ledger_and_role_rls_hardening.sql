@@ -206,7 +206,7 @@ ON CONFLICT (journal_entry_id, account_code) DO NOTHING;
 
 
 -- Verify the historical backfill before enabling the deferred balance triggers.
-DO $
+DO $$
 BEGIN
   IF EXISTS (
     SELECT 1
@@ -222,7 +222,7 @@ BEGIN
     RAISE EXCEPTION 'Historical financial journal backfill is not balanced';
   END IF;
 END;
-$;
+$$;
 
 DROP TRIGGER IF EXISTS financial_journal_entry_balance_check ON public.financial_journal_entries;
 CREATE CONSTRAINT TRIGGER financial_journal_entry_balance_check
