@@ -4,16 +4,23 @@ export async function submitKyc(userId, payload) {
  // Identity has already been authenticated and resolved by Wanky Protect.
   // Do not trust or re-resolve client-supplied identity here.
 
+  const fullName = payload.full_name ?? payload.fullName;
+  const phone = payload.phone;
+  const bvn = payload.bvn;
+  const bankCode = payload.bank_code ?? payload.bankCode;
+  const accountNumber = payload.account_number ?? payload.accountNumber;
+  const accountName = payload.account_name ?? payload.accountName;
+
   // Step 1: Validate required fields
 
   // Step 2: Validate required fields
   if (
-    !payload.fullName ||
-    !payload.phone ||
-    !payload.bvn ||
-    !payload.bankCode ||
-    !payload.accountNumber ||
-    !payload.accountName
+    !fullName ||
+    !phone ||
+    !bvn ||
+    !bankCode ||
+    !accountNumber ||
+    !accountName
   ) {
     return {
       success: false,
@@ -23,12 +30,12 @@ export async function submitKyc(userId, payload) {
 
   // Step 3: Prepare the KYC data
   const kycData = {
-    full_name: payload.fullName,
-    phone: payload.phone,
-    bvn: payload.bvn,
-    bank_code: payload.bankCode,
-    account_number: payload.accountNumber,
-    account_name: payload.accountName,
+    full_name: fullName,
+    phone,
+    bvn,
+    bank_code: bankCode,
+    account_number: accountNumber,
+    account_name: accountName,
     status: 'pending',
   };
 
