@@ -7,12 +7,11 @@
  *
  * ── getTransactions / Transaction ───────────────────────────────────
  * BACKEND EXISTS: GET /transactions/:userId  (errands.js line ~380)
- * Route reads userId from URL param, NOT from x-user-id header.
+ * Route validates the URL userId against the authenticated bearer-token identity.
  * Previous implementation called GET /api/transactions with no userId
  * in the path → 404 every time.
  * FIX: GET /api/transactions/${userId} — userId injected by caller
- * since apiFetch has no way to know it from module-level currentUser
- * in the URL (only in headers). getTransactions() now accepts userId.
+ * The backend rejects requests where the URL userId differs from req.user.id.
  *
  * Transaction type was wrong: backend inserts type values of
  * 'escrow_lock', 'deposit', 'withdraw', 'release', 'withdrawal' —
@@ -46,16 +45,15 @@
  * BACKEND EXISTS: GET / (role-filtered)
  * Previous: GET /api/errands/client → 404 (no such path)
  * Backend GET / filters by x-role='client' → returns that user's errands.
- * FIX: GET /api/errands with x-role: 'client' in headers (apiFetch
- * already injects x-role from currentUser.role, so no extra header needed)
+ * FIX: GET /api/errands; the backend derives the role from the session.
  *
  * ── getOpenErrands → GET /api/errands ───────────────────────────────
  * BACKEND EXISTS: GET / (role-filtered)
  * Previous: GET /api/errands/open → 404 (no such path)
  * Backend GET / filters by x-role='runner' → returns open + assigned errands.
- * FIX: GET /api/errands with x-role: 'runner'
+ * FIX: GET /api/errands; the backend derives the role from the session.
  * Both getClientErrands and getOpenErrands hit the same route.
- * The role header (already set by setApiUser) determines what is returned.
+ * Wanky Protect resolves the user's application role from the protected profile.
  *
  * ── createErrand ────────────────────────────────────────────────────
  * BACKEND EXISTS: POST / (errands.js line ~10)
