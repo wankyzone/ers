@@ -90,14 +90,26 @@ useEffect(() => {
     const {
         data: listener,
     } = supabase.auth.onAuthStateChange(
-        async (_event: AuthChangeEvent, session: Session | null) => {
+        (_event: AuthChangeEvent, session: Session | null) => {
 
             setSession(session);
 
             setAccessToken(session?.access_token ?? null);
             setApiAuthToken(session?.access_token ?? null);
 
-            setUser(await resolveApplicationUser(session?.user ?? null));
+            const authUser = session?.user ?? null;
+            setUser(authUser);
+
+            // Defer profile lookup until the Supabase auth callback has returned.
+            if (authUser) {
+              setTimeout(() => {
+                void resolveApplicationUser(authUser)
+                  .then(setUser)
+                  .catch((error) => {
+                    console.warn("[AuthProvider] Application role lookup failed:", error);
+                  });
+              }, 0);
+            }
 
         }
     );
