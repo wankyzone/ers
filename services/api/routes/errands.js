@@ -396,19 +396,29 @@ router.post('/:id/dispute', authenticate, async (req, res) => {
     return res.status(400).json({ error: 'Cannot dispute a released errand' });
   }
 
-  const { error: updateError } = await supabase
+  const { data: updatedErrand, error: updateError } = await supabase
     .from('errands')
-    .update({
-      escrow_status: 'under_review'
-    })
-    .eq('id', id);
+    .update({ escrow_status: 'under_review' })
+    .eq('id', id)
+    // Optimistic state check prevents a stale dispute request from
+    // overwriting a concurrent successful escrow release.
+    .eq('escrow_status', errand.escrow_status)
+    .neq('escrow_status', 'released')
+    .select('id')
+    .maybeSingle();
 
   if (updateError) {
     console.error('DISPUTE UPDATE ERROR:', updateError);
     return res.status(500).json({ error: 'Failed to open dispute' });
   }
 
-  res.json({ message: 'Dispute opened' });
+  if (!updatedErrand) {
+    return res.status(409).json({
+      error: 'Errand escrow state changed. Refresh before opening a dispute.',
+    });
+  }
+
+  return res.json({ message: 'Dispute opened' });
 });
 
 router.get('/wallet', authenticate, async (req, res) => {
@@ -441,149 +451,20 @@ router.get('/wallet', authenticate, async (req, res) => {
   }
 });
 
-router.post('/withdraw', authenticate, async (req, res) => {
-  const userId = req.user.id;
-  const { amount, pin } = req.body;
-
-  const user = await db.user.find(userId);
-
-  // ─── 1. COOLDOWN CHECK ─────────────────────────
-  if (user.cooldown_until && new Date() < user.cooldown_until) {
-    return res.status(403).json({
-      message: 'Account temporarily locked. Try again later.',
-    });
-  }
-
-  // ─── 2. PIN VALIDATION ─────────────────────────
-  const validPin = compareHash(pin, user.pin_hash);
-
-  if (!validPin) {
-    const attempts = user.pin_attempts + 1;
-
-    // lock user
-    if (attempts >= LIMITS.MAX_ATTEMPTS) {
-      await db.user.update(userId, {
-        pin_attempts: 0,
-        cooldown_until: new Date(Date.now() + LIMITS.COOLDOWN_MINUTES * 60000),
-      });
-
-      return res.status(403).json({
-        message: 'Too many attempts. Account locked for 15 minutes.',
-      });
-    }
-
-    await db.user.update(userId, {
-      pin_attempts: attempts,
-    });
-
-    return res.status(401).json({ message: 'Invalid PIN' });
-  }
-
-  // reset attempts
-  await db.user.update(userId, {
-    pin_attempts: 0,
-    cooldown_until: null,
-  });
-
-  // ─── 3. KYC CHECK ─────────────────────────────
-  if (!user.kyc_verified) {
-    return res.status(403).json({ message: 'Complete KYC first' });
-  }
-
-  // ─── 4. LIMIT CHECK ───────────────────────────
-  if (amount > LIMITS.MAX_PER_TRANSACTION) {
-    return res.status(400).json({
-      message: 'Exceeds per transaction limit',
-    });
-  }
-
-  if (user.daily_withdrawn + amount > LIMITS.DAILY_LIMIT) {
-    return res.status(400).json({
-      message: 'Daily withdrawal limit exceeded',
-    });
-  }
-
-  // ─── 5. FRAUD DETECTION ───────────────────────
-  const lastWithdraw = user.last_withdraw_at;
-
-  if (lastWithdraw && Date.now() - new Date(lastWithdraw).getTime() < 10000) {
-    return res.status(429).json({
-      message: 'Too many rapid withdrawals',
-    });
-  }
-
-  // ─── 6. DEFAULT BANK ─────────────────────────
-  const bank = await db.banks.findDefault(userId);
-
-  if (!bank) {
-    return res.status(400).json({ message: 'No default bank account' });
-  }
-
-  // ─── 7. BALANCE CHECK ─────────────────────────
-  if (user.balance < amount) {
-    return res.status(400).json({ message: 'Insufficient balance' });
-  }
-
-  // ─── 8. PROCESS TRANSFER ─────────────────────
-  const transfer = await paystack.transfer({
-    amount,
-    recipient: bank.recipient_code,
-  });
-
-  // ─── 9. UPDATE USER STATE ────────────────────
-  await db.user.update(userId, {
-    balance: user.balance - amount,
-    daily_withdrawn: user.daily_withdrawn + amount,
-    last_withdraw_at: new Date(),
-  });
-
-  // ─── 10. LOG TRANSACTION ─────────────────────
-  await db.transactions.insert({
-    user_id: userId,
-    type: 'withdrawal',
-    amount,
-    status: 'pending',
-  });
-
-  const deviceId = req.headers['x-device-id'];
-
-const device = await db.devices.find(userId, deviceId);
-
-let requireOTP = false;
-
-// 🚨 New device
-if (!device) {
-  requireOTP = true;
-}
-
-// 🚨 Large amount
-if (amount > 50000) {
-  requireOTP = true;
-}
-
-  return res.json({
-    success: true,
-    message: 'Withdrawal processing',
+router.post('/withdraw', authenticate, authorize('runner'), (_req, res) => {
+  return res.status(501).json({
+    success: false,
+    code: 'WITHDRAWALS_NOT_AVAILABLE',
+    message: 'Withdrawals are temporarily unavailable while payout security is being completed.',
   });
 });
 
-router.post('/verify-otp', authenticate, async (req, res) => {
-  const userId = req.user.id;
-  const { code } = req.body;
-
-  const otp = await db.otp.findLatest(userId);
-
-  if (!otp || otp.used || otp.code !== code) {
-    return res.status(400).json({ message: 'Invalid OTP' });
-  }
-
-  if (new Date() > otp.expires_at) {
-    return res.status(400).json({ message: 'OTP expired' });
-  }
-
-  await db.otp.update(otp.id, { used: true });
-
-  return res.json({ success: true });
+router.post('/verify-otp', authenticate, authorize('runner'), (_req, res) => {
+  return res.status(501).json({
+    success: false,
+    code: 'OTP_VERIFICATION_NOT_AVAILABLE',
+    message: 'Withdrawal OTP verification is not available yet.',
+  });
 });
 
 export default router;
