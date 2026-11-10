@@ -587,7 +587,7 @@ BEGIN
   WHERE id = v_kyc.user_id
   FOR UPDATE;
 
-  IF v_profile.id IS NULL OR v_profile.role NOT IN ('client', 'runner') THEN
+  IF v_profile.id IS NULL OR v_profile.role IS NULL OR v_profile.role NOT IN ('client', 'runner') THEN
     RAISE EXCEPTION 'KYC applicant is not eligible for runner approval';
   END IF;
 
