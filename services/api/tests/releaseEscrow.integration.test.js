@@ -30,6 +30,8 @@ async function psql(sql) {
 
 async function cleanup() {
   await psql(`
+    DELETE FROM public.platform_commission_reconciliation_exceptions WHERE errand_id = '${IDS.errand}';
+    DELETE FROM public.platform_commission_entries WHERE errand_id = '${IDS.errand}';
     DELETE FROM public.transactions
     WHERE errand_id = '${IDS.errand}'
        OR user_id IN ('${IDS.client}', '${IDS.runner}');
@@ -252,6 +254,14 @@ async function getRunnerWallet() {
   `);
 }
 
+async function getCommissionEntry() {
+  return psql(`
+    SELECT gross_amount, runner_amount, commission_amount, currency, status
+    FROM public.platform_commission_entries
+    WHERE errand_id = '${IDS.errand}';
+  `);
+}
+
 async function getReleaseTransaction() {
   return psql(`
     SELECT
@@ -295,6 +305,12 @@ test('escrow release confirms errand and moves funds exactly once', async () => 
     'runner must receive the configured payout'
   );
 
+  assert.equal(
+    await getCommissionEntry(),
+    '5000|4000|1000|NGN|recognized',
+    'commission ledger must recognize exactly 20 percent in the same release transaction'
+  );
+
   const transaction = await getReleaseTransaction();
 
   assert.match(transaction, /5000/);
@@ -323,6 +339,18 @@ test('escrow release confirms errand and moves funds exactly once', async () => 
     await getRunnerWallet(),
     '4000|4000|0',
     'repeated confirmation must not credit runner twice'
+  );
+
+  const commissionEntries = await psql(`
+    SELECT count(*)
+    FROM public.platform_commission_entries
+    WHERE errand_id = '${IDS.errand}';
+  `);
+
+  assert.equal(
+    commissionEntries,
+    '1',
+    'repeated confirmation must not create another platform commission entry'
   );
 
   const transactions = await psql(`
