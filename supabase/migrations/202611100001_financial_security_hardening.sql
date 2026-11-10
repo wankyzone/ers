@@ -86,5 +86,5 @@ END;
 $$;
 
 REVOKE ALL ON FUNCTION public.settle_paystack_withdrawal_atomic(text, text, bigint) FROM PUBLIC;
-REVOKE EXECUTE ON FUNCTION public.settle_paystack_withdrawal_atomic(text, text) FROM anon, authenticated;
-GRANT EXECUTE ON FUNCTION public.settle_paystack_withdrawal_atomic(text, text) TO service_role;
+REVOKE EXECUTE ON FUNCTION public.settle_paystack_withdrawal_atomic(text, text, bigint) FROM anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.settle_paystack_withdrawal_atomic(text, text, bigint) TO service_role;
