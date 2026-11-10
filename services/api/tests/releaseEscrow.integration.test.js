@@ -30,6 +30,8 @@ async function psql(sql) {
 
 async function cleanup() {
   await psql(`
+    DELETE FROM public.financial_journal_lines WHERE journal_entry_id IN (SELECT id FROM public.financial_journal_entries WHERE source_id = '${IDS.errand}');
+    DELETE FROM public.financial_journal_entries WHERE source_id = '${IDS.errand}';
     DELETE FROM public.platform_commission_reconciliation_exceptions WHERE errand_id = '${IDS.errand}';
     DELETE FROM public.platform_commission_entries WHERE errand_id = '${IDS.errand}';
     DELETE FROM public.transactions
@@ -254,6 +256,25 @@ async function getRunnerWallet() {
   `);
 }
 
+async function getJournalEntry() {
+  return psql(`
+    SELECT debit_total, credit_total, status
+    FROM public.financial_journal_entries
+    WHERE source_id = '${IDS.errand}';
+  `);
+}
+
+async function getJournalLines() {
+  return psql(`
+    SELECT account_code || ':' || side || ':' || amount
+    FROM public.financial_journal_lines
+    WHERE journal_entry_id = (
+      SELECT id FROM public.financial_journal_entries WHERE source_id = '${IDS.errand}'
+    )
+    ORDER BY account_code;
+  `);
+}
+
 async function getCommissionEntry() {
   return psql(`
     SELECT gross_amount, runner_amount, commission_amount, currency, status
@@ -306,6 +327,18 @@ test('escrow release confirms errand and moves funds exactly once', async () => 
   );
 
   assert.equal(
+    await getJournalEntry(),
+    '5000|5000|posted',
+    'escrow release must create a balanced posted general-ledger entry'
+  );
+
+  assert.equal(
+    await getJournalLines(),
+    'client_escrow_liability:debit:5000\nplatform_commission_revenue:credit:1000\nrunner_wallet_liability:credit:4000',
+    'journal must debit escrow liability and credit runner payable plus ERS commission'
+  );
+
+  assert.equal(
     await getCommissionEntry(),
     '5000|4000|1000|NGN|recognized',
     'commission ledger must recognize exactly 20 percent in the same release transaction'
@@ -340,6 +373,14 @@ test('escrow release confirms errand and moves funds exactly once', async () => 
     '4000|4000|0',
     'repeated confirmation must not credit runner twice'
   );
+
+  const journalEntries = await psql(`
+    SELECT count(*)
+    FROM public.financial_journal_entries
+    WHERE source_id = '${IDS.errand}';
+  `);
+
+  assert.equal(journalEntries, '1', 'repeated release must not duplicate journal entries');
 
   const commissionEntries = await psql(`
     SELECT count(*)
