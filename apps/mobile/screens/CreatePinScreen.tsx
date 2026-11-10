@@ -29,10 +29,6 @@ export default function CreatePinScreen({ setTab }: any) {
 
     const { data } = await apiFetch('/pin/set', {
       method: 'POST',
-      headers: {
-        'x-user-id': user.id,
-        ...(user.role ? { 'x-role': user.role } : {}),
-      },
       body: JSON.stringify({ pin }),
     });
 
