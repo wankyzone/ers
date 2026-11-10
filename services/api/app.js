@@ -53,7 +53,7 @@ export function createApiServer() {
 app.use(cors());
 
 app.use(
-  '/paystack/webhook',
+  ['/paystack/webhook', '/api/paystack/webhook'],
   express.raw({ type: 'application/json' })
 );
 
