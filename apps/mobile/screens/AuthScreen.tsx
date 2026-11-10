@@ -43,8 +43,9 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-// ✓ screens/ → ../ → project root → supabase.ts
-import supabase from '../supabase';
+// Use the same shared Supabase client as AuthProvider so auth events and
+// persisted sessions are observed consistently across the mobile app.
+import { supabase } from '@ers/auth';
 
 // ─── Colors ──────────────────────────────────────────────────────────────────
 
