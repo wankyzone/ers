@@ -528,7 +528,7 @@ router.post('/webhook', async (req, res) => {
        5. TRANSFER FAILED
     ============================================================ */
 
-    if (event.event === 'transfer.failed' || event.event === 'transfer.reversed') {
+    if (event.event === 'transfer.failed') {
       const reference = event.data?.reference;
       if (!reference) {
         return res.status(400).json({ success: false, message: 'Transfer reference is required' });
