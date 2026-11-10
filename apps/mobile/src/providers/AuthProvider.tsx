@@ -5,6 +5,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { AppState } from "react-native";
 
 import type {
   AuthChangeEvent,
@@ -99,6 +100,25 @@ useEffect(() => {
     restoreSession();
 
 }, []);
+
+useEffect(() => {
+    const subscription = AppState.addEventListener("change", (state) => {
+      if (state !== "active" || !user) return;
+
+      const resolutionVersion = ++authResolutionVersion.current;
+      void resolveApplicationUser(user)
+        .then((resolvedUser) => {
+          if (resolutionVersion === authResolutionVersion.current) {
+            setUser(resolvedUser);
+          }
+        })
+        .catch((error) => {
+          console.warn("[AuthProvider] Role refresh failed:", error);
+        });
+    });
+
+    return () => subscription.remove();
+}, [user?.id]);
 
 useEffect(() => {
 
