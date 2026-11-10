@@ -50,7 +50,7 @@
  * ─────────────────────────────────────────────────────────────────
  * Original saveBankAccount() only logged to console. The bank account
  * was never actually saved to the backend after KYC success.
- * addBankAccount is now exported from api.ts and is called here.
+ * Bank payout setup is intentionally separate from KYC and remains disabled until payout security is complete.
  *
  * BUG 5 — user.role is not on Supabase's User type
  * ─────────────────────────────────────────────────────────────────
