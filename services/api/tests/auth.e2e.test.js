@@ -52,16 +52,7 @@ test('E2E marketplace: client creates errand and runner accepts it', async () =>
 
   assert.ifError(clientUserError);
 
-  const { error: clientProfileError } = await adminSupabase
-    .from('profiles')
-    .insert({
-      id: clientId,
-      email: clientEmail,
-      role: 'client',
-      verified: true,
-    });
-
-  assert.ifError(clientProfileError);
+  // The Auth trigger creates the default client profile.
 
   const { error: walletError } = await adminSupabase
     .from('wallets')
@@ -101,14 +92,15 @@ test('E2E marketplace: client creates errand and runner accepts it', async () =>
 
   assert.ifError(runnerUserError);
 
+  // Trusted service-role fixture promotion; public signup metadata cannot set roles.
   const { error: runnerProfileError } = await adminSupabase
     .from('profiles')
-    .insert({
+    .upsert({
       id: runnerId,
       email: runnerEmail,
       role: 'runner',
       verified: true,
-    });
+    }, { onConflict: 'id' });
 
   assert.ifError(runnerProfileError);
 
@@ -159,6 +151,11 @@ test('E2E marketplace: client creates errand and runner accepts it', async () =>
   const { port } = server.address();
 
   const baseUrl = `http://127.0.0.1:${port}`;
+
+  const unauthenticatedWalletResponse = await fetch(`${baseUrl}/api/wallet`, {
+    headers: { 'x-user-id': clientId },
+  });
+  assert.equal(unauthenticatedWalletResponse.status, 401);
 
   /*
    * ============================================================
@@ -346,6 +343,22 @@ test('E2E marketplace: client creates errand and runner accepts it', async () =>
   assert.equal(Number(runnerWalletAfterRelease.balance), Number(errand.payout_amount));
   assert.equal(Number(runnerWalletAfterRelease.escrow_balance), 0);
 
+  const spoofedWalletResponse = await fetch(`${baseUrl}/api/wallet`, {
+    headers: {
+      Authorization: `Bearer ${runnerAuth.accessToken}`,
+      'x-user-id': clientId,
+    },
+  });
+  assert.equal(spoofedWalletResponse.status, 200);
+  const spoofedWallet = await spoofedWalletResponse.json();
+  assert.equal(spoofedWallet.user_id, runnerId);
+
+  const crossUserTransactionsResponse = await fetch(
+    `${baseUrl}/api/transactions/${clientId}`,
+    { headers: { Authorization: `Bearer ${runnerAuth.accessToken}` } }
+  );
+  assert.equal(crossUserTransactionsResponse.status, 403);
+
   const { data: releaseTransactions, error: releaseTransactionsError } =
     await adminSupabase
       .from('transactions')
@@ -460,6 +473,35 @@ test.after(async () => {
   }
 
   if (createdErrandId) {
+    const { data: journalEntries } = await adminSupabase
+      .from('financial_journal_entries')
+      .select('id')
+      .eq('source_id', createdErrandId);
+
+    const journalIds = (journalEntries ?? []).map((entry) => entry.id);
+
+    if (journalIds.length) {
+      await adminSupabase
+        .from('financial_journal_lines')
+        .delete()
+        .in('journal_entry_id', journalIds);
+    }
+
+    await adminSupabase
+      .from('financial_journal_entries')
+      .delete()
+      .eq('source_id', createdErrandId);
+
+    await adminSupabase
+      .from('platform_commission_reconciliation_exceptions')
+      .delete()
+      .eq('errand_id', createdErrandId);
+
+    await adminSupabase
+      .from('platform_commission_entries')
+      .delete()
+      .eq('errand_id', createdErrandId);
+
     await adminSupabase
       .from('transactions')
       .delete()

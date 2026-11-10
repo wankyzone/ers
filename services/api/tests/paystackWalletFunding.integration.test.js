@@ -85,6 +85,9 @@ async function createUser() {
       true
     );
 
+    SELECT set_config('request.jwt.claim.role', 'service_role', true);
+
+
     INSERT INTO public.profiles (
       id,
       email,
@@ -96,7 +99,11 @@ async function createUser() {
       'paystack-test@example.com',
       'client',
       true
-    );
+    )
+    ON CONFLICT (id) DO UPDATE SET
+      email = EXCLUDED.email,
+      role = EXCLUDED.role,
+      verified = EXCLUDED.verified;
   `);
 }
 

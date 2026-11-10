@@ -50,7 +50,7 @@
  * ─────────────────────────────────────────────────────────────────
  * Original saveBankAccount() only logged to console. The bank account
  * was never actually saved to the backend after KYC success.
- * addBankAccount is now exported from api.ts and is called here.
+ * Bank payout setup is intentionally separate from KYC and remains disabled until payout security is complete.
  *
  * BUG 5 — user.role is not on Supabase's User type
  * ─────────────────────────────────────────────────────────────────
@@ -83,7 +83,7 @@ import {
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 
 import { useAuth } from '../src/context/AuthContext';
-import { apiFetch, addBankAccount } from '../src/services/api';
+import { apiFetch } from '../src/services/api';
 import type { AppStackParamList } from '../src/navigation/AppStack';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -168,10 +168,6 @@ export default function KycScreen({ navigation, route }: Props) {
         const { data, res } = await apiFetch('/paystack/resolve-account', {
           method: 'POST',
           // BUG 5 FIX: role is in user_metadata, not top-level user object
-          headers: {
-            'x-user-id': user.id,
-            'x-role': user.user_metadata?.role ?? 'client',
-          },
           body: JSON.stringify({
             account_number: debouncedAccount,
             bank_code: form.bank_code,
@@ -239,10 +235,6 @@ export default function KycScreen({ navigation, route }: Props) {
 
       const { data, res } = await apiFetch('/kyc/verify', {
         method: 'POST',
-        headers: {
-          'x-user-id': user.id,
-          'x-role': user.user_metadata?.role ?? 'client',
-        },
         body: JSON.stringify(form),
       });
 
@@ -255,17 +247,11 @@ export default function KycScreen({ navigation, route }: Props) {
          'verification failed'
       );
 
-      // BUG 4 FIX: actually save the bank account via API after KYC success
-      await addBankAccount({
-        bank_name: form.bank_name,
-        bank_code: form.bank_code,
-        account_number: form.account_number,
-        account_name: form.account_name,
-      });
+      Alert.alert(
+        'KYC Submitted',
+        'Your details have been submitted for review. Runner access will be enabled after approval.'
+      );
 
-      Alert.alert('KYC Complete ✅', 'Your account is now verified');
-
-      // BUG 1 FIX: replace setTab('wallet') with navigation
       navigation.navigate('Wallet');
 
     } catch (err: unknown) {

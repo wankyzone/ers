@@ -1,37 +1,17 @@
 import express from 'express';
+import { authenticate } from '../modules/protect/index.js';
 
 const router = express.Router();
 
-router.get('/', async (_req, res) => {
-  return res.json([]);
+const unavailable = (_req, res) => res.status(501).json({
+  success: false,
+  code: 'BANK_PAYOUT_SETUP_NOT_AVAILABLE',
+  message: 'Bank payout management is unavailable until secure ownership, verification, and persistence are implemented.',
 });
 
-router.post('/', async (req, res) => {
-  return res.status(201).json({
-    success: true,
-    message: 'Placeholder bank account created',
-    data: {
-      id: 'placeholder-bank',
-      ...req.body,
-      is_default: false,
-    },
-  });
-});
-
-router.patch('/:id/default', async (req, res) => {
-  return res.json({
-    success: true,
-    message: 'Placeholder default bank updated',
-    id: req.params.id,
-  });
-});
-
-router.delete('/:id', async (req, res) => {
-  return res.json({
-    success: true,
-    message: 'Placeholder bank account deleted',
-    id: req.params.id,
-  });
-});
+router.get('/', authenticate, (_req, res) => res.json([]));
+router.post('/', authenticate, unavailable);
+router.patch('/:id/default', authenticate, unavailable);
+router.delete('/:id', authenticate, unavailable);
 
 export default router;

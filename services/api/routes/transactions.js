@@ -1,14 +1,37 @@
 import express from 'express';
+import { authenticate } from '../modules/protect/index.js';
+import supabase from '../supabase.js';
 
 const router = express.Router();
 
-router.get('/', async (req, res) => {
+// Never expose a shared transaction feed. Scope every read to the
+// authenticated account; privileged admin reporting uses separate routes.
+const listOwnTransactions = async (req, res) => {
   try {
-    // TODO: replace with real DB query
-    res.json([]);
-  } catch (err) {
-    res.status(500).json({ message: 'Failed to fetch transactions' });
+    const requestedUserId = req.params.userId ?? req.user.id;
+    if (requestedUserId !== req.user.id) {
+      return res.status(403).json({ success: false, message: 'Unauthorized' });
+    }
+
+    const { data, error } = await supabase
+      .from('transactions')
+      .select('id, amount, type, status, reference, created_at, errand_id')
+      .eq('user_id', req.user.id)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('Transaction history lookup failed:', error);
+      return res.status(500).json({ success: false, message: 'Unable to load transaction history' });
+    }
+
+    return res.json(data ?? []);
+  } catch (error) {
+    console.error('Transaction history error:', error);
+    return res.status(500).json({ success: false, message: 'Unable to load transaction history' });
   }
-});
+};
+
+router.get('/', authenticate, listOwnTransactions);
+router.get('/:userId', authenticate, listOwnTransactions);
 
 export default router;

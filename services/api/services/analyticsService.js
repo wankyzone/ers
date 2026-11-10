@@ -38,25 +38,19 @@ async function countRows(table, filters = []) {
 
 async function getRevenue(startDate) {
   const { data, error } = await supabase
-    .from('errands')
-    .select('price, payout_amount')
-    .eq('status', 'confirmed')
-    .eq('escrow_status', 'released')
-    .gte('created_at', startDate);
+    .from('platform_commission_entries')
+    .select('commission_amount')
+    .eq('status', 'recognized')
+    .gte('recognized_at', startDate);
 
   if (error) {
-    throw new Error(`Failed to fetch analytics revenue: ${error.message}`);
+    throw new Error(`Failed to fetch platform commission ledger: ${error.message}`);
   }
 
-  return (data ?? []).reduce((sum, errand) => {
-    const price = Number(errand.price ?? 0);
-    const payout =
-      errand.payout_amount != null
-        ? Number(errand.payout_amount)
-        : Math.floor(price * 0.8);
-
-    return sum + (price - payout);
-  }, 0);
+  return (data ?? []).reduce(
+    (sum, entry) => sum + Number(entry.commission_amount ?? 0),
+    0,
+  );
 }
 
 async function getErrandCounts(startDate) {

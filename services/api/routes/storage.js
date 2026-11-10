@@ -1,6 +1,7 @@
 import express from "express";
 import multer from "multer";
 import { uploadRunnerDocuments } from "../services/storageService.js";
+import { authenticate, authorize } from "../modules/protect/index.js";
 
 const router = express.Router();
 const allowedMimeTypes = [
@@ -47,6 +48,8 @@ const uploadFields = upload.fields([
 
 router.post(
   "/upload",
+  authenticate,
+  authorize("client", "runner"),
   (req, res, next) => {
     uploadFields(req, res, (err) => {
       if (err) {
@@ -61,14 +64,7 @@ router.post(
   },
   async (req, res) => {
     try {
-      const userId = req.headers["x-user-id"];
-
-      if (!userId) {
-        return res.status(400).json({
-          success: false,
-          message: "Missing x-user-id header.",
-        });
-      }
+      const userId = req.user.id;
 
       const result = await uploadRunnerDocuments(
         userId,

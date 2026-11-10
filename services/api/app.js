@@ -24,6 +24,7 @@ import adminAnalyticsRoutes from './routes/adminAnalytics.js';
 import adminNotificationsRoutes from './routes/adminNotifications.js';
 import storageRoutes from './routes/storage.js';
 import { getApiHealth } from './modules/health.js';
+import { authenticate } from './modules/protect/index.js';
 import { initSocket } from './server/socket.js';
 
 
@@ -52,7 +53,7 @@ export function createApiServer() {
 app.use(cors());
 
 app.use(
-  '/paystack/webhook',
+  ['/paystack/webhook', '/api/paystack/webhook'],
   express.raw({ type: 'application/json' })
 );
 
@@ -71,25 +72,16 @@ app.get('/health', (_req, res) => {
   res.json(getApiHealth());
 });
 
-app.get('/wallet', async (req, res) => {
+const getAuthenticatedWallet = async (req, res) => {
   try {
-    const userId = req.headers['x-user-id'];
-
-    if (!userId) {
-      return res.status(400).json({
-        success: false,
-        message: 'Missing x-user-id header',
-      });
-    }
-
     const { data, error } = await supabase
       .from('wallets')
-      .select('*')
-      .eq('user_id', userId)
-      .single();
+      .select('user_id, balance, available_balance, pending_balance, escrow_balance, created_at')
+      .eq('user_id', req.user.id)
+      .maybeSingle();
 
-    if (error && error.code !== 'PGRST116') {
-      console.log('Wallet fetch error:', error);
+    if (error) {
+      console.error('Wallet fetch error:', error);
       return res.status(500).json({
         success: false,
         message: 'Failed to fetch wallet',
@@ -97,39 +89,34 @@ app.get('/wallet', async (req, res) => {
     }
 
     return res.json(data ?? {
+      user_id: req.user.id,
       balance: 0,
       available_balance: 0,
+      pending_balance: 0,
       escrow_balance: 0,
     });
   } catch (err) {
-    console.log('Wallet route error:', err);
+    console.error('Wallet route error:', err);
     return res.status(500).json({
       success: false,
       message: 'Server error',
     });
   }
+};
+
+app.get('/wallet', authenticate, getAuthenticatedWallet);
+app.get('/api/wallet', authenticate, getAuthenticatedWallet);
+
+// Withdrawals are intentionally unavailable until the authenticated,
+// atomic reservation + idempotent Paystack transfer workflow is deployed.
+const withdrawalUnavailable = (_req, res) => res.status(501).json({
+  success: false,
+  code: 'WITHDRAWALS_NOT_AVAILABLE',
+  message: 'Withdrawals are temporarily unavailable while payout security is being completed.',
 });
 
-app.get('/api/wallet', (req, res, next) => {
-  req.url = '/wallet';
-  return app.handle(req, res, next);
-});
-
-app.post('/withdraw', (_req, res) => {
-  res.json({
-    success: true,
-    message: 'Placeholder withdrawal endpoint',
-    requireOtp: false,
-  });
-});
-
-app.post('/api/withdraw', (_req, res) => {
-  res.json({
-    success: true,
-    message: 'Placeholder withdrawal endpoint',
-    requireOtp: false,
-  });
-});
+app.post('/withdraw', withdrawalUnavailable);
+app.post('/api/withdraw', withdrawalUnavailable);
 
 app.use('/errands', errandsRouter);
 app.use('/transactions', transactionsRouter);

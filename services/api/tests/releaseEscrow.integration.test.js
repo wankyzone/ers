@@ -30,6 +30,10 @@ async function psql(sql) {
 
 async function cleanup() {
   await psql(`
+    DELETE FROM public.financial_journal_lines WHERE journal_entry_id IN (SELECT id FROM public.financial_journal_entries WHERE source_id = '${IDS.errand}');
+    DELETE FROM public.financial_journal_entries WHERE source_id = '${IDS.errand}';
+    DELETE FROM public.platform_commission_reconciliation_exceptions WHERE errand_id = '${IDS.errand}';
+    DELETE FROM public.platform_commission_entries WHERE errand_id = '${IDS.errand}';
     DELETE FROM public.transactions
     WHERE errand_id = '${IDS.errand}'
        OR user_id IN ('${IDS.client}', '${IDS.runner}');
@@ -111,6 +115,9 @@ async function createUsers() {
         true
       );
 
+    SELECT set_config('request.jwt.claim.role', 'service_role', true);
+
+
     INSERT INTO public.profiles (
       id,
       email,
@@ -129,7 +136,11 @@ async function createUsers() {
         'escrow-release-runner@example.com',
         'runner',
         true
-      );
+      )
+    ON CONFLICT (id) DO UPDATE SET
+      email = EXCLUDED.email,
+      role = EXCLUDED.role,
+      verified = EXCLUDED.verified;
 
     INSERT INTO public.runners (
       id,
@@ -245,6 +256,33 @@ async function getRunnerWallet() {
   `);
 }
 
+async function getJournalEntry() {
+  return psql(`
+    SELECT debit_total, credit_total, status
+    FROM public.financial_journal_entries
+    WHERE source_id = '${IDS.errand}';
+  `);
+}
+
+async function getJournalLines() {
+  return psql(`
+    SELECT account_code || ':' || side || ':' || amount
+    FROM public.financial_journal_lines
+    WHERE journal_entry_id = (
+      SELECT id FROM public.financial_journal_entries WHERE source_id = '${IDS.errand}'
+    )
+    ORDER BY account_code;
+  `);
+}
+
+async function getCommissionEntry() {
+  return psql(`
+    SELECT gross_amount, runner_amount, commission_amount, currency, status
+    FROM public.platform_commission_entries
+    WHERE errand_id = '${IDS.errand}';
+  `);
+}
+
 async function getReleaseTransaction() {
   return psql(`
     SELECT
@@ -288,6 +326,24 @@ test('escrow release confirms errand and moves funds exactly once', async () => 
     'runner must receive the configured payout'
   );
 
+  assert.equal(
+    await getJournalEntry(),
+    '5000|5000|posted',
+    'escrow release must create a balanced posted general-ledger entry'
+  );
+
+  assert.equal(
+    await getJournalLines(),
+    'client_escrow_liability:debit:5000\nplatform_commission_revenue:credit:1000\nrunner_wallet_liability:credit:4000',
+    'journal must debit escrow liability and credit runner payable plus ERS commission'
+  );
+
+  assert.equal(
+    await getCommissionEntry(),
+    '5000|4000|1000|NGN|recognized',
+    'commission ledger must recognize exactly 20 percent in the same release transaction'
+  );
+
   const transaction = await getReleaseTransaction();
 
   assert.match(transaction, /5000/);
@@ -318,6 +374,26 @@ test('escrow release confirms errand and moves funds exactly once', async () => 
     'repeated confirmation must not credit runner twice'
   );
 
+  const journalEntries = await psql(`
+    SELECT count(*)
+    FROM public.financial_journal_entries
+    WHERE source_id = '${IDS.errand}';
+  `);
+
+  assert.equal(journalEntries, '1', 'repeated release must not duplicate journal entries');
+
+  const commissionEntries = await psql(`
+    SELECT count(*)
+    FROM public.platform_commission_entries
+    WHERE errand_id = '${IDS.errand}';
+  `);
+
+  assert.equal(
+    commissionEntries,
+    '1',
+    'repeated confirmation must not create another platform commission entry'
+  );
+
   const transactions = await psql(`
     SELECT count(*)
     FROM public.transactions
@@ -333,6 +409,57 @@ test('escrow release confirms errand and moves funds exactly once', async () => 
 
   await cleanup();
 });
+
+
+test('escrow release rejects a stored runner payout outside the approved 80 percent split', async () => {
+  await cleanup();
+  await createUsers();
+  await createEscrowState();
+
+  await psql(`
+    UPDATE public.errands
+    SET payout_amount = 4500
+    WHERE id = '${IDS.errand}';
+  `);
+
+  await assert.rejects(
+    () => releaseEscrow(),
+    /Stored runner payout does not match the approved 80 percent split/
+  );
+
+  assert.equal(
+    await getErrandState(),
+    'completed|awaiting_confirmation',
+    'invalid payout must not finalize the errand'
+  );
+
+  assert.equal(
+    await getClientWallet(),
+    '0|0|5000',
+    'invalid payout must not debit client escrow'
+  );
+
+  assert.equal(
+    await getRunnerWallet(),
+    '0|0|0',
+    'invalid payout must not credit runner funds'
+  );
+
+  assert.equal(
+    await psql(`SELECT count(*) FROM public.platform_commission_entries WHERE errand_id = '${IDS.errand}';`),
+    '0',
+    'invalid payout must not recognize ERS commission'
+  );
+
+  assert.equal(
+    await psql(`SELECT count(*) FROM public.financial_journal_entries WHERE source_id = '${IDS.errand}';`),
+    '0',
+    'invalid payout must not post a general-ledger journal'
+  );
+
+  await cleanup();
+});
+
 
 after(async () => {
   await cleanup();

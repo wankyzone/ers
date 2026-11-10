@@ -1,9 +1,11 @@
 import {
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
+import { AppState } from "react-native";
 
 import type {
   AuthChangeEvent,
@@ -15,6 +17,39 @@ import { AuthContext } from "../context/AuthContext";
 
 import { supabase } from "@ers/auth";
 import { setApiAuthToken } from "../services/api";
+
+async function resolveApplicationUser(authUser: User | null): Promise<User | null> {
+  if (!authUser) return null;
+
+  let applicationRole = "client";
+
+  try {
+    const { data: profile, error } = await supabase
+      .from("profiles")
+      .select("role")
+      .eq("id", authUser.id)
+      .maybeSingle();
+
+    if (error) {
+      console.warn("[AuthProvider] Failed to resolve application role:", error.message);
+    } else if (profile?.role) {
+      applicationRole = profile.role;
+    }
+  } catch (error) {
+    console.warn("[AuthProvider] Application role lookup failed:", error);
+  }
+
+  return {
+    ...authUser,
+    user_metadata: {
+      ...authUser.user_metadata,
+      // Role comes from the RLS-protected application profile, never from
+      // client-controlled signup metadata.
+      role: applicationRole,
+    },
+  };
+}
+
 
 interface Props {
   children: ReactNode;
@@ -35,6 +70,8 @@ const [accessToken, setAccessToken] =
 const [loading, setLoading] =
     useState(true);
 
+const authResolutionVersion = useRef(0);
+
 useEffect(() => {
 
     async function restoreSession() {
@@ -50,7 +87,11 @@ useEffect(() => {
         setAccessToken(currentSession?.access_token ?? null);
         setApiAuthToken(currentSession?.access_token ?? null);
 
-        setUser(currentSession?.user ?? null);
+        const resolutionVersion = ++authResolutionVersion.current;
+        const resolvedUser = await resolveApplicationUser(currentSession?.user ?? null);
+        if (resolutionVersion === authResolutionVersion.current) {
+          setUser(resolvedUser);
+        }
 
         setLoading(false);
 
@@ -59,6 +100,25 @@ useEffect(() => {
     restoreSession();
 
 }, []);
+
+useEffect(() => {
+    const subscription = AppState.addEventListener("change", (state) => {
+      if (state !== "active" || !user) return;
+
+      const resolutionVersion = ++authResolutionVersion.current;
+      void resolveApplicationUser(user)
+        .then((resolvedUser) => {
+          if (resolutionVersion === authResolutionVersion.current) {
+            setUser(resolvedUser);
+          }
+        })
+        .catch((error) => {
+          console.warn("[AuthProvider] Role refresh failed:", error);
+        });
+    });
+
+    return () => subscription.remove();
+}, [user?.id]);
 
 useEffect(() => {
 
@@ -72,7 +132,24 @@ useEffect(() => {
             setAccessToken(session?.access_token ?? null);
             setApiAuthToken(session?.access_token ?? null);
 
-            setUser(session?.user ?? null);
+            const authUser = session?.user ?? null;
+            const resolutionVersion = ++authResolutionVersion.current;
+            setUser(authUser);
+
+            // Defer profile lookup until the Supabase auth callback has returned.
+            if (authUser) {
+              setTimeout(() => {
+                void resolveApplicationUser(authUser)
+                  .then((resolvedUser) => {
+                    if (resolutionVersion === authResolutionVersion.current) {
+                      setUser(resolvedUser);
+                    }
+                  })
+                  .catch((error) => {
+                    console.warn("[AuthProvider] Application role lookup failed:", error);
+                  });
+              }, 0);
+            }
 
         }
     );
