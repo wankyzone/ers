@@ -43,11 +43,6 @@ export default function OtpScreen({ navigation }: Props) {
 
       const { data, res } = await apiFetch('/otp/verify', {
         method: 'POST',
-        headers: {
-          'x-user-id': String(user.id),
-          'x-role': String(user.role ?? ''),
-          'Content-Type': 'application/json',
-        },
         body: JSON.stringify({ code: otp }),
       });
 
