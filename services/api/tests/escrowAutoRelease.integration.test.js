@@ -124,6 +124,9 @@ async function createUsers() {
         true
       );
 
+    SELECT set_config('request.jwt.claim.role', 'service_role', true);
+
+
     INSERT INTO public.profiles (
       id,
       email,
@@ -142,7 +145,11 @@ async function createUsers() {
         'auto-release-runner@example.com',
         'runner',
         true
-      );
+      )
+    ON CONFLICT (id) DO UPDATE SET
+      email = EXCLUDED.email,
+      role = EXCLUDED.role,
+      verified = EXCLUDED.verified;
 
     INSERT INTO public.runners (
       id,
