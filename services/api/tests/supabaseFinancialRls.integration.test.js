@@ -22,6 +22,7 @@ async function psql(sql) {
 async function cleanup() {
   await psql(`
     DELETE FROM public.kyc_profiles WHERE user_id = '${USER_ID}';
+    DELETE FROM public.runners WHERE id = '${USER_ID}';
     DELETE FROM public.profiles WHERE id = '${USER_ID}';
     DELETE FROM auth.users WHERE id = '${USER_ID}';
   `);
@@ -79,13 +80,14 @@ test('runner role is granted only through trusted KYC approval', async () => {
   `);
 
   const result = await psql(`
-    SELECT p.role || '|' || p.verified || '|' || k.status
+    SELECT p.role || '|' || p.verified || '|' || k.status || '|' || r.name || '|' || r.is_available
     FROM public.profiles p
     JOIN public.kyc_profiles k ON k.user_id = p.id
+    JOIN public.runners r ON r.id = p.id
     WHERE p.id = '${USER_ID}';
   `);
 
-  assert.equal(result, 'runner|true|approved');
+  assert.equal(result, 'runner|true|approved|Test Runner|true');
 
   await cleanup();
 });
