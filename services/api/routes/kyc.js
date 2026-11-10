@@ -17,7 +17,7 @@ const router = express.Router();
 router.post(
   "/verify",
    authenticate,
-   authorize("runner"),
+   authorize("client", "runner"),
    async (req, res) => {
   try {
     const userId = req.user.id;
