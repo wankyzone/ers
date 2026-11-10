@@ -49,15 +49,8 @@
  *
  * FIX: wrap in useCallback with [user] dependency, matching fetchWallet.
  *
- * BUG 4 — user.role is not on Supabase's User type
- * ─────────────────────────────────────────────────────────────────
- * Supabase User has user.user_metadata.role (app role set at signup).
- * user.role is the Supabase system role (e.g. "authenticated"), not
- * 'client' or 'runner'. Sending it as x-role gives the backend the
- * wrong value.
- *
- * FIX: user.user_metadata?.role ?? 'client' everywhere.
- * The backend resolves the application role from the protected profile.
+ * Application role is resolved by Wanky Protect from the protected profile;
+ * the mobile client does not send role headers.
  *
  * BUG 5 — addMoney uses Linking directly, no PaymentSuccess navigation
  * ─────────────────────────────────────────────────────────────────
