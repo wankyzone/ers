@@ -45,8 +45,15 @@ async function seed(status = 'pending') {
     INSERT INTO public.users (id, email, full_name, role, kyc_verified)
     VALUES ('${USER_ID}', 'withdrawal-settlement@example.com', 'Withdrawal Test', 'runner', true);
 
+    SELECT set_config('request.jwt.claim.role', 'service_role', true);
+
+
     INSERT INTO public.profiles (id, email, role, verified)
-    VALUES ('${USER_ID}', 'withdrawal-settlement@example.com', 'runner', true);
+    VALUES ('${USER_ID}', 'withdrawal-settlement@example.com', 'runner', true)
+    ON CONFLICT (id) DO UPDATE SET
+      email = EXCLUDED.email,
+      role = EXCLUDED.role,
+      verified = EXCLUDED.verified;
 
     INSERT INTO public.wallets (user_id, balance, available_balance, escrow_balance)
     VALUES ('${USER_ID}', 5000, 3800, 0);
