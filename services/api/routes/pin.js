@@ -11,7 +11,7 @@ router.post('/set', authenticate, authorize('runner'), async (req, res) => {
   const userId = req.user.id;
   const { pin } = req.body;
 
-  if (typeof pin !== 'string' || !/^\\d{4}$/.test(pin)) {
+  if (typeof pin !== 'string' || !/^\d{4}$/.test(pin)) {
     return res.status(400).json({ message: 'Invalid PIN' });
   }
 
@@ -48,7 +48,7 @@ router.post('/verify', authenticate, authorize('runner'), async (req, res) => {
   const userId = req.user.id;
   const { pin } = req.body;
 
-  if (typeof pin !== 'string' || !/^\\d{4}$/.test(pin)) {
+  if (typeof pin !== 'string' || !/^\d{4}$/.test(pin)) {
     return res.status(400).json({ message: 'Missing fields' });
   }
 
