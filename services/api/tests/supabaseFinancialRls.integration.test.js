@@ -63,8 +63,12 @@ test('runner role is granted only through trusted KYC approval', async () => {
       '{}', '{"role":"admin"}'::jsonb
     );
 
-    INSERT INTO public.kyc_profiles (user_id, status)
-    VALUES ('${USER_ID}', 'pending');
+    INSERT INTO public.kyc_profiles (
+      user_id, full_name, phone, bvn, bank_code, account_number, account_name, status
+    ) VALUES (
+      '${USER_ID}', 'Test Runner', '08000000000', '12345678901',
+      '044', '0123456789', 'TEST RUNNER', 'pending'
+    );
 
     SELECT set_config('request.jwt.claim.role', 'service_role', true);
 
