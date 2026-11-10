@@ -513,19 +513,20 @@ AFTER INSERT ON auth.users
 FOR EACH ROW
 EXECUTE FUNCTION public.handle_new_user();
 
--- Remove permissive and overlapping profile policies from recovered schema.
-DROP POLICY IF EXISTS "Allow insert own profile" ON public.profiles;
-DROP POLICY IF EXISTS "Allow users to insert own profile" ON public.profiles;
-DROP POLICY IF EXISTS "Users can insert own profile" ON public.profiles;
-DROP POLICY IF EXISTS "allow_insert_for_authenticator" ON public.profiles;
-DROP POLICY IF EXISTS "allow_insert_from_trigger" ON public.profiles;
-DROP POLICY IF EXISTS "allow_profile_insert" ON public.profiles;
-DROP POLICY IF EXISTS "profiles_insert_authenticated" ON public.profiles;
-DROP POLICY IF EXISTS "Allow select own profile" ON public.profiles;
-DROP POLICY IF EXISTS "Profiles: read own" ON public.profiles;
-DROP POLICY IF EXISTS "Users can read own profile" ON public.profiles;
-DROP POLICY IF EXISTS "Profiles: update own" ON public.profiles;
-DROP POLICY IF EXISTS "Users can update own profile" ON public.profiles;
+-- Drop every legacy profile policy, including unknown overlapping permissive policies.
+DO $$
+DECLARE
+  v_policy record;
+BEGIN
+  FOR v_policy IN
+    SELECT policyname
+    FROM pg_catalog.pg_policies
+    WHERE schemaname = 'public' AND tablename = 'profiles'
+  LOOP
+    EXECUTE pg_catalog.format('DROP POLICY %I ON public.profiles', v_policy.policyname);
+  END LOOP;
+END;
+$$;
 
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 
@@ -650,12 +651,20 @@ ALTER TABLE public.orchestrator_retry_log ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.runners ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.audit_logs ENABLE ROW LEVEL SECURITY;
 
--- Remove any client write policies on wallets and retain only self-read.
-DROP POLICY IF EXISTS "Users can update own wallet" ON public.wallets;
-DROP POLICY IF EXISTS wallets_update_self ON public.wallets;
-DROP POLICY IF EXISTS wallets_insert_self ON public.wallets;
-DROP POLICY IF EXISTS wallets_delete_self ON public.wallets;
-DROP POLICY IF EXISTS "Users can read own wallet" ON public.wallets;
+-- Remove every legacy wallet policy; restore only self-read.
+DO $$
+DECLARE
+  v_policy record;
+BEGIN
+  FOR v_policy IN
+    SELECT policyname
+    FROM pg_catalog.pg_policies
+    WHERE schemaname = 'public' AND tablename = 'wallets'
+  LOOP
+    EXECUTE pg_catalog.format('DROP POLICY %I ON public.wallets', v_policy.policyname);
+  END LOOP;
+END;
+$$;
 
 CREATE POLICY wallets_select_self
 ON public.wallets
@@ -663,12 +672,20 @@ FOR SELECT
 TO authenticated
 USING (user_id = (SELECT auth.uid()));
 
--- Errand state changes and creation are backend/RPC-owned. Clients may read
--- their own errands; runners may read unassigned work and their assignments.
-DROP POLICY IF EXISTS "Clients can insert errands" ON public.errands;
-DROP POLICY IF EXISTS "Open errands visibility" ON public.errands;
-DROP POLICY IF EXISTS "Runners can update errands" ON public.errands;
-DROP POLICY IF EXISTS "read_available_errands" ON public.errands;
+-- Remove all legacy errand policies. State changes and creation are backend/RPC-owned.
+DO $$
+DECLARE
+  v_policy record;
+BEGIN
+  FOR v_policy IN
+    SELECT policyname
+    FROM pg_catalog.pg_policies
+    WHERE schemaname = 'public' AND tablename = 'errands'
+  LOOP
+    EXECUTE pg_catalog.format('DROP POLICY %I ON public.errands', v_policy.policyname);
+  END LOOP;
+END;
+$$;
 
 CREATE POLICY errands_select_participant_or_available
 ON public.errands
