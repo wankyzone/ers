@@ -21,6 +21,7 @@ async function psql(sql) {
 
 async function cleanup() {
   await psql(`
+    DELETE FROM public.kyc_profiles WHERE user_id = '${USER_ID}';
     DELETE FROM public.profiles WHERE id = '${USER_ID}';
     DELETE FROM auth.users WHERE id = '${USER_ID}';
   `);
@@ -49,6 +50,42 @@ test('signup metadata cannot create an administrator profile', async () => {
   await cleanup();
 });
 
+test('runner role is granted only through trusted KYC approval', async () => {
+  await cleanup();
+
+  await psql(`
+    INSERT INTO auth.users (
+      id, aud, role, email, created_at, updated_at,
+      raw_app_meta_data, raw_user_meta_data
+    ) VALUES (
+      '${USER_ID}', 'authenticated', 'authenticated',
+      'runner-promotion@example.com', now(), now(),
+      '{}', '{"role":"admin"}'::jsonb
+    );
+
+    INSERT INTO public.kyc_profiles (user_id, status)
+    VALUES ('${USER_ID}', 'pending');
+
+    SELECT set_config('request.jwt.claim.role', 'service_role', true);
+
+    SELECT *
+    FROM public.approve_runner_kyc_atomic(
+      (SELECT id FROM public.kyc_profiles WHERE user_id = '${USER_ID}')
+    );
+  `);
+
+  const result = await psql(`
+    SELECT p.role || '|' || p.verified || '|' || k.status
+    FROM public.profiles p
+    JOIN public.kyc_profiles k ON k.user_id = p.id
+    WHERE p.id = '${USER_ID}';
+  `);
+
+  assert.equal(result, 'runner|true|approved');
+
+  await cleanup();
+});
+
 test('financial and identity tables have RLS enabled and client grants are least-privilege', async () => {
   const rlsEnabled = await psql(`
     SELECT CASE WHEN bool_and(c.relrowsecurity) THEN 'true' ELSE 'false' END
@@ -61,7 +98,8 @@ test('financial and identity tables have RLS enabled and client grants are least
         'otp_codes', 'user_devices', 'jobs', 'job_logs',
         'system_logs', 'orchestrator_retry_log', 'runners', 'audit_logs',
         'platform_commission_entries',
-        'platform_commission_reconciliation_exceptions'
+        'platform_commission_reconciliation_exceptions',
+        'financial_journal_entries', 'financial_journal_lines'
       ]);
   `);
 
@@ -76,12 +114,14 @@ test('financial and identity tables have RLS enabled and client grants are least
       has_table_privilege('authenticated', 'public.profiles', 'UPDATE'),
       has_table_privilege('authenticated', 'public.transactions', 'SELECT'),
       has_table_privilege('anon', 'public.platform_commission_entries', 'SELECT'),
-      has_table_privilege('authenticated', 'public.platform_commission_entries', 'SELECT');
+      has_table_privilege('authenticated', 'public.platform_commission_entries', 'SELECT'),
+      has_table_privilege('anon', 'public.financial_journal_entries', 'SELECT'),
+      has_table_privilege('authenticated', 'public.financial_journal_lines', 'SELECT');
   `);
 
   assert.equal(
     privileges,
-    'f|t|f|f|f|f|f|f',
+    'f|t|f|f|f|f|f|f|f|f',
     'client roles may read only their RLS-scoped wallet/profile/errand surfaces; they cannot write financial state'
   );
 });
