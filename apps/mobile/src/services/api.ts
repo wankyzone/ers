@@ -44,22 +44,20 @@
  * ── getClientErrands → GET /api/errands ─────────────────────────────
  * BACKEND EXISTS: GET / (role-filtered)
  * Previous: GET /api/errands/client → 404 (no such path)
- * Backend GET / filters by x-role='client' → returns that user's errands.
+ * Backend derives the application role from the verified profile.
  * FIX: GET /api/errands; the backend derives the role from the session.
  *
  * ── getOpenErrands → GET /api/errands ───────────────────────────────
  * BACKEND EXISTS: GET / (role-filtered)
  * Previous: GET /api/errands/open → 404 (no such path)
- * Backend GET / filters by x-role='runner' → returns open + assigned errands.
+ * Backend derives the application role from the verified profile.
  * FIX: GET /api/errands; the backend derives the role from the session.
  * Both getClientErrands and getOpenErrands hit the same route.
  * Wanky Protect resolves the user's application role from the protected profile.
  *
  * ── createErrand ────────────────────────────────────────────────────
  * BACKEND EXISTS: POST / (errands.js line ~10)
- * Backend reads: x-client-id header (NOT x-user-id)
- * Previous apiFetch injected x-user-id but NOT x-client-id.
- * FIX: createErrand explicitly sets x-client-id header.
+ * Identity is derived from the verified Supabase access token.
  *
  * ── Errand type ─────────────────────────────────────────────────────
  * Backend schema (from errands.js INSERT):
@@ -276,10 +274,10 @@ export async function apiFetch<TData = ApiMessageResponse | string | null>(
  * getClientErrands
  *
  * Backend route: GET /  (errands.js ~line 220)
- * Filters by x-role='client' → returns only that client's errands.
+ * The backend derives the role from the authenticated profile.
  *
  * Previous path /api/errands/client did not exist → 404.
- * Fixed: hit GET /api/errands with role already set in apiFetch headers.
+ * Fixed: hit GET /api/errands; Wanky Protect derives the role from the session.
  */
 export const getClientErrands = async (): Promise<Errand[]> => {
   const { data, res } = await apiFetch<Errand[] | ApiMessageResponse>('/api/errands');
@@ -337,10 +335,10 @@ export const confirmErrand = async (id: string): Promise<{ success: boolean }> =
  * getOpenErrands
  *
  * Backend route: GET /  (errands.js ~line 220)
- * Filters by x-role='runner' → returns unassigned + assigned-to-me errands.
+ * The backend derives the role from the authenticated profile.
  *
  * Previous path /api/errands/open did not exist → 404.
- * Fixed: same GET /api/errands route, role header determines the filter.
+ * Fixed: same GET /api/errands route; Wanky Protect determines the filter.
  */
 export const getOpenErrands = async (): Promise<Errand[]> => {
   const { data, res } = await apiFetch<Errand[] | ApiMessageResponse>('/api/errands');
