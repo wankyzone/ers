@@ -74,7 +74,7 @@ RETURNS trigger
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = ''
-AS $
+AS $$
 DECLARE
   v_entry_id uuid;
   v_entry public.financial_journal_entries%ROWTYPE;
@@ -111,7 +111,7 @@ BEGIN
 
   RETURN NULL;
 END;
-$;
+$$;
 
 REVOKE ALL ON FUNCTION public.assert_financial_journal_balanced() FROM PUBLIC, anon, authenticated;
 
