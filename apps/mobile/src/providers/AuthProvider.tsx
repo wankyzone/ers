@@ -20,14 +20,22 @@ import { setApiAuthToken } from "../services/api";
 async function resolveApplicationUser(authUser: User | null): Promise<User | null> {
   if (!authUser) return null;
 
-  const { data: profile, error } = await supabase
-    .from("profiles")
-    .select("role")
-    .eq("id", authUser.id)
-    .maybeSingle();
+  let applicationRole = "client";
 
-  if (error) {
-    console.warn("[AuthProvider] Failed to resolve application role:", error.message);
+  try {
+    const { data: profile, error } = await supabase
+      .from("profiles")
+      .select("role")
+      .eq("id", authUser.id)
+      .maybeSingle();
+
+    if (error) {
+      console.warn("[AuthProvider] Failed to resolve application role:", error.message);
+    } else if (profile?.role) {
+      applicationRole = profile.role;
+    }
+  } catch (error) {
+    console.warn("[AuthProvider] Application role lookup failed:", error);
   }
 
   return {
@@ -36,7 +44,7 @@ async function resolveApplicationUser(authUser: User | null): Promise<User | nul
       ...authUser.user_metadata,
       // Role comes from the RLS-protected application profile, never from
       // client-controlled signup metadata.
-      role: profile?.role ?? "client",
+      role: applicationRole,
     },
   };
 }
