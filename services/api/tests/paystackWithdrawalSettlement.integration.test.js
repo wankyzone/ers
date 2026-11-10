@@ -62,7 +62,7 @@ async function seed(status = 'pending') {
 async function settle(outcome) {
   return psql(`
     SELECT status
-    FROM public.settle_paystack_withdrawal_atomic('${REFERENCE}', '${outcome}');
+    FROM public.settle_paystack_withdrawal_atomic('${REFERENCE}', '${outcome}', ${AMOUNT * 100});
   `);
 }
 
@@ -104,7 +104,7 @@ test('unknown transfer reference cannot mutate any wallet', async () => {
   await assert.rejects(
     () => psql(`
       SELECT *
-      FROM public.settle_paystack_withdrawal_atomic('ERS-UNKNOWN-REFERENCE', 'failed');
+      FROM public.settle_paystack_withdrawal_atomic('ERS-UNKNOWN-REFERENCE', 'failed', ${AMOUNT * 100});
     `),
     /Withdrawal transaction not found/
   );
@@ -112,6 +112,28 @@ test('unknown transfer reference cannot mutate any wallet', async () => {
   assert.equal(await walletAvailable(), '3800');
   await cleanup();
 });
+
+
+test('transfer amount mismatch cannot settle or refund a withdrawal', async () => {
+  await seed();
+
+  await assert.rejects(
+    () => psql(`
+      SELECT *
+      FROM public.settle_paystack_withdrawal_atomic('${REFERENCE}', 'failed', ${(AMOUNT + 1) * 100});
+    `),
+    /Transfer amount mismatch/
+  );
+
+  assert.equal(await walletAvailable(), '3800');
+  const status = await psql(`
+    SELECT status FROM public.transactions WHERE reference = '${REFERENCE}';
+  `);
+  assert.equal(status, 'pending');
+
+  await cleanup();
+});
+
 
 after(async () => {
   await cleanup();
