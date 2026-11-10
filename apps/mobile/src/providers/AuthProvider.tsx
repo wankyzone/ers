@@ -1,6 +1,7 @@
 import {
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -60,6 +61,8 @@ const [accessToken, setAccessToken] =
 const [loading, setLoading] =
     useState(true);
 
+const authResolutionVersion = useRef(0);
+
 useEffect(() => {
 
     async function restoreSession() {
@@ -75,7 +78,11 @@ useEffect(() => {
         setAccessToken(currentSession?.access_token ?? null);
         setApiAuthToken(currentSession?.access_token ?? null);
 
-        setUser(await resolveApplicationUser(currentSession?.user ?? null));
+        const resolutionVersion = ++authResolutionVersion.current;
+        const resolvedUser = await resolveApplicationUser(currentSession?.user ?? null);
+        if (resolutionVersion === authResolutionVersion.current) {
+          setUser(resolvedUser);
+        }
 
         setLoading(false);
 
@@ -98,13 +105,18 @@ useEffect(() => {
             setApiAuthToken(session?.access_token ?? null);
 
             const authUser = session?.user ?? null;
+            const resolutionVersion = ++authResolutionVersion.current;
             setUser(authUser);
 
             // Defer profile lookup until the Supabase auth callback has returned.
             if (authUser) {
               setTimeout(() => {
                 void resolveApplicationUser(authUser)
-                  .then(setUser)
+                  .then((resolvedUser) => {
+                    if (resolutionVersion === authResolutionVersion.current) {
+                      setUser(resolvedUser);
+                    }
+                  })
                   .catch((error) => {
                     console.warn("[AuthProvider] Application role lookup failed:", error);
                   });
