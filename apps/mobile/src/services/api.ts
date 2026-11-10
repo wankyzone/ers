@@ -28,18 +28,8 @@
  * the 404 is a backend concern. Do NOT remove the screens or the calls.
  *
  * ── withdrawWithPin ──────────────────────────────────────────────────
- * BACKEND EXISTS: POST /withdraw  (errands.js line ~290)
- * Route reads: x-user-id header, body { amount, pin }
- * Route performs: cooldown check, PIN validation, KYC check, limit
- * check, fraud detection, bank check, balance check, Paystack transfer.
- * PROBLEM: The route computes requireOtp but NEVER sends it in the
- * response. It always returns { success: true, message: 'Withdrawal
- * processing' } regardless. This is a backend bug.
- * FIX (frontend): treat the response as { requireOtp?: boolean,
- * message?: string, success?: boolean }. The field will be undefined
- * until the backend sends it, so res.requireOtp will be falsy and the
- * normal success path runs. No screen changes needed for this.
- * The route path is /withdraw not /wallet/withdraw — fixed here.
+ * Backend endpoint returns HTTP 501 until the atomic payout workflow,
+ * verified recipient ownership, KYC/risk controls, and step-up checks ship.
  *
  * ── getClientErrands → GET /api/errands ─────────────────────────────
  * BACKEND EXISTS: GET / (role-filtered)
@@ -381,10 +371,8 @@ export const completeErrand = async (id: string): Promise<Errand> => {
 /**
  * getTransactions
  *
- * Backend route: GET /transactions/:userId  (errands.js ~line 380)
- * CRITICAL: route reads userId from URL param, NOT from any header.
- * Previous implementation called GET /api/transactions (no userId) → 404.
- * Fixed: URL includes userId directly.
+ * Backend route: GET /api/transactions/:userId (transactions.js).
+ * The backend checks the requested ID against the authenticated session.
  *
  * Requires userId to be passed by the caller (read from useAuth().user.id).
  */
@@ -399,9 +387,8 @@ export const getTransactions = async (userId: string): Promise<Transaction[]> =>
 /**
  * getWallet
  *
- * Backend route: GET /wallet  (errands.js ~line 410)
- * Reads: authenticated identity from Wanky Protect (injected by apiFetch)
- * Returns: { balance, available_balance, escrow_balance, ... }
+ * Backend route: GET /api/wallet.
+ * Identity is derived from the verified Supabase access token.
  */
 export const getWallet = async (): Promise<{ balance: number; available_balance: number }> => {
   const { data, res } = await apiFetch<WalletResponse>('/api/wallet');
@@ -446,15 +433,14 @@ export const withdrawWithPin = async (
 
 // ─── Bank Accounts ────────────────────────────────────────────────────────────
 //
-// NO backend routes exist for bank account management in errands.js.
-// These wrappers target the most likely REST paths. They will return 404
-// until the backend implements the routes. Kept here so screens compile.
+// Bank payout management is intentionally disabled with HTTP 501 until
+// recipient ownership and the complete payout lifecycle are implemented.
 //
 // When backend routes are added, no frontend changes will be needed.
 
 /**
- * getUserBanks — NO BACKEND ROUTE EXISTS YET
- * Expected: GET /api/bank-accounts
+ * getUserBanks — bank payout setup is not available yet (HTTP 501).
+ * Expected: GET /api/banks
  */
 export const getUserBanks = async (): Promise<BankAccount[]> => {
   const { data, res } = await apiFetch<BankAccount[] | BankAccountsResponse>('/api/bank-accounts');
@@ -468,8 +454,7 @@ export const getUserBanks = async (): Promise<BankAccount[]> => {
 };
 
 /**
- * setDefaultBank — NO BACKEND ROUTE EXISTS YET
- * Expected: PATCH /api/bank-accounts/:id/default
+ * setDefaultBank — disabled until bank ownership and payout security are implemented.
  */
 export const setDefaultBank = async (id: string): Promise<void> => {
   const { data, res } = await apiFetch<ApiMessageResponse>(`/api/bank-accounts/${id}/default`, {
@@ -479,8 +464,7 @@ export const setDefaultBank = async (id: string): Promise<void> => {
 };
 
 /**
- * deleteBank — NO BACKEND ROUTE EXISTS YET
- * Expected: DELETE /api/bank-accounts/:id
+ * deleteBank — disabled until bank ownership and payout security are implemented.
  */
 export const deleteBank = async (id: string): Promise<void> => {
   const { data, res } = await apiFetch<ApiMessageResponse>(`/api/bank-accounts/${id}`, {
@@ -490,8 +474,7 @@ export const deleteBank = async (id: string): Promise<void> => {
 };
 
 /**
- * addBankAccount — NO BACKEND ROUTE EXISTS YET
- * Expected: POST /api/bank-accounts
+ * addBankAccount — disabled until bank ownership and payout security are implemented.
  *
  * NOTE: The backend has POST /paystack/create-recipient which creates a
  * Paystack transfer recipient — that is a different concept (payment rail
