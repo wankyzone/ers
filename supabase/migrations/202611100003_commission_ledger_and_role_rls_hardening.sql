@@ -472,7 +472,7 @@ $$;
 REVOKE ALL ON FUNCTION public.handle_new_user() FROM PUBLIC, anon, authenticated;
 
 -- Remove any previous trigger bound to this function, regardless of its legacy name.
-DO $
+DO $$
 DECLARE
   v_trigger record;
 BEGIN
@@ -486,7 +486,7 @@ BEGIN
     EXECUTE pg_catalog.format('DROP TRIGGER %I ON auth.users', v_trigger.tgname);
   END LOOP;
 END;
-$;
+$$;
 
 CREATE TRIGGER ers_handle_new_user_profile
 AFTER INSERT ON auth.users
