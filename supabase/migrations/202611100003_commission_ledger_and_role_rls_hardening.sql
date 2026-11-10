@@ -758,11 +758,20 @@ ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public
 ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public
   REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC, anon, authenticated;
 
--- Supabase-managed objects may also be created as supabase_admin. Harden that
--- owner's defaults as well; changing only postgres defaults leaves a gap.
-ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin IN SCHEMA public
-  REVOKE ALL ON TABLES FROM PUBLIC, anon, authenticated;
-ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin IN SCHEMA public
-  REVOKE ALL ON SEQUENCES FROM PUBLIC, anon, authenticated;
-ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin IN SCHEMA public
-  REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC, anon, authenticated;
+-- Supabase-managed objects may also be created as supabase_admin.
+-- PostgreSQL permits changing another role's defaults only when the migration
+-- executor is that role or a member of it. Managed Supabase commonly denies
+-- this membership, so do not make the whole migration fail on this optional
+-- owner-specific hardening. Emit an explicit notice for the deployment gate.
+DO $
+BEGIN
+  IF current_user = 'supabase_admin'
+     OR pg_catalog.pg_has_role(current_user, 'supabase_admin', 'MEMBER') THEN
+    EXECUTE 'ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin IN SCHEMA public REVOKE ALL ON TABLES FROM PUBLIC, anon, authenticated';
+    EXECUTE 'ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin IN SCHEMA public REVOKE ALL ON SEQUENCES FROM PUBLIC, anon, authenticated';
+    EXECUTE 'ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin IN SCHEMA public REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC, anon, authenticated';
+  ELSE
+    RAISE NOTICE 'Skipped supabase_admin default privileges: migration role % is not a member of supabase_admin. Review this owner-specific setting with Supabase before production approval.', current_user;
+  END IF;
+END;
+$;
