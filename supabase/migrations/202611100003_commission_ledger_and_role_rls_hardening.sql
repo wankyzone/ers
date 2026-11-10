@@ -30,6 +30,147 @@ CREATE TABLE IF NOT EXISTS public.platform_commission_entries (
 CREATE INDEX IF NOT EXISTS platform_commission_recognized_at_idx
   ON public.platform_commission_entries (recognized_at DESC);
 
+CREATE TABLE IF NOT EXISTS public.financial_journal_entries (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  source_type text NOT NULL CHECK (source_type = 'errand_release'),
+  source_id uuid NOT NULL REFERENCES public.errands(id) ON DELETE RESTRICT,
+  currency text NOT NULL DEFAULT 'NGN' CHECK (currency = 'NGN'),
+  debit_total numeric NOT NULL CHECK (debit_total > 0),
+  credit_total numeric NOT NULL CHECK (credit_total > 0),
+  status text NOT NULL DEFAULT 'posted' CHECK (status IN ('posted', 'reversed')),
+  created_at timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT financial_journal_entry_balanced CHECK (debit_total = credit_total),
+  CONSTRAINT financial_journal_source_unique UNIQUE (source_type, source_id)
+);
+
+CREATE TABLE IF NOT EXISTS public.financial_journal_lines (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  journal_entry_id uuid NOT NULL REFERENCES public.financial_journal_entries(id) ON DELETE RESTRICT,
+  account_code text NOT NULL CHECK (
+    account_code IN (
+      'client_escrow_liability',
+      'runner_wallet_liability',
+      'platform_commission_revenue'
+    )
+  ),
+  side text NOT NULL CHECK (side IN ('debit', 'credit')),
+  amount numeric NOT NULL CHECK (amount > 0),
+  currency text NOT NULL DEFAULT 'NGN' CHECK (currency = 'NGN'),
+  user_id uuid,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT financial_journal_account_once UNIQUE (journal_entry_id, account_code)
+);
+
+ALTER TABLE public.financial_journal_entries ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.financial_journal_lines ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON TABLE public.financial_journal_entries, public.financial_journal_lines
+  FROM PUBLIC, anon, authenticated;
+GRANT ALL ON TABLE public.financial_journal_entries, public.financial_journal_lines
+  TO service_role;
+
+-- Deferred validation checks the final set of lines at transaction commit.
+CREATE OR REPLACE FUNCTION public.assert_financial_journal_balanced()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $
+DECLARE
+  v_entry_id uuid;
+  v_entry public.financial_journal_entries%ROWTYPE;
+  v_debits numeric;
+  v_credits numeric;
+BEGIN
+  IF TG_TABLE_NAME = 'financial_journal_entries' THEN
+    v_entry_id := NEW.id;
+  ELSE
+    v_entry_id := NEW.journal_entry_id;
+  END IF;
+
+  SELECT *
+    INTO v_entry
+  FROM public.financial_journal_entries
+  WHERE id = v_entry_id;
+
+  IF v_entry.id IS NULL THEN
+    RETURN NULL;
+  END IF;
+
+  SELECT
+    COALESCE(pg_catalog.sum(amount) FILTER (WHERE side = 'debit'), 0),
+    COALESCE(pg_catalog.sum(amount) FILTER (WHERE side = 'credit'), 0)
+  INTO v_debits, v_credits
+  FROM public.financial_journal_lines
+  WHERE journal_entry_id = v_entry_id;
+
+  IF v_debits <> v_entry.debit_total
+     OR v_credits <> v_entry.credit_total
+     OR v_debits <> v_credits THEN
+    RAISE EXCEPTION 'Financial journal entry % is not balanced', v_entry_id;
+  END IF;
+
+  RETURN NULL;
+END;
+$;
+
+REVOKE ALL ON FUNCTION public.assert_financial_journal_balanced() FROM PUBLIC, anon, authenticated;
+
+DROP TRIGGER IF EXISTS financial_journal_entry_balance_check ON public.financial_journal_entries;
+CREATE CONSTRAINT TRIGGER financial_journal_entry_balance_check
+AFTER INSERT OR UPDATE ON public.financial_journal_entries
+DEFERRABLE INITIALLY DEFERRED
+FOR EACH ROW EXECUTE FUNCTION public.assert_financial_journal_balanced();
+
+DROP TRIGGER IF EXISTS financial_journal_line_balance_check ON public.financial_journal_lines;
+CREATE CONSTRAINT TRIGGER financial_journal_line_balance_check
+AFTER INSERT OR UPDATE ON public.financial_journal_lines
+DEFERRABLE INITIALLY DEFERRED
+FOR EACH ROW EXECUTE FUNCTION public.assert_financial_journal_balanced();
+
+-- Build balanced journals for the historical commission rows without changing
+-- existing wallet balances or runner payouts.
+INSERT INTO public.financial_journal_entries (
+  source_type, source_id, currency, debit_total, credit_total, status, created_at
+)
+SELECT
+  'errand_release', c.errand_id, c.currency,
+  c.gross_amount, c.gross_amount, 'posted', c.recognized_at
+FROM public.platform_commission_entries c
+WHERE c.status = 'recognized'
+ON CONFLICT (source_type, source_id) DO NOTHING;
+
+INSERT INTO public.financial_journal_lines (
+  journal_entry_id, account_code, side, amount, currency, user_id
+)
+SELECT
+  j.id, 'client_escrow_liability', 'debit', c.gross_amount, c.currency, c.client_id
+FROM public.financial_journal_entries j
+JOIN public.platform_commission_entries c ON c.errand_id = j.source_id
+WHERE j.source_type = 'errand_release'
+ON CONFLICT (journal_entry_id, account_code) DO NOTHING;
+
+INSERT INTO public.financial_journal_lines (
+  journal_entry_id, account_code, side, amount, currency, user_id
+)
+SELECT
+  j.id, 'runner_wallet_liability', 'credit', c.runner_amount, c.currency, c.runner_id
+FROM public.financial_journal_entries j
+JOIN public.platform_commission_entries c ON c.errand_id = j.source_id
+WHERE j.source_type = 'errand_release'
+ON CONFLICT (journal_entry_id, account_code) DO NOTHING;
+
+INSERT INTO public.financial_journal_lines (
+  journal_entry_id, account_code, side, amount, currency, user_id
+)
+SELECT
+  j.id, 'platform_commission_revenue', 'credit', c.commission_amount, c.currency, NULL
+FROM public.financial_journal_entries j
+JOIN public.platform_commission_entries c ON c.errand_id = j.source_id
+WHERE j.source_type = 'errand_release'
+  AND c.commission_amount > 0
+ON CONFLICT (journal_entry_id, account_code) DO NOTHING;
+
+
 ALTER TABLE public.platform_commission_entries ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON TABLE public.platform_commission_entries FROM PUBLIC, anon, authenticated;
 GRANT ALL ON TABLE public.platform_commission_entries TO service_role;
@@ -117,6 +258,7 @@ DECLARE
   v_payout numeric;
   v_expected_payout numeric;
   v_commission numeric;
+  v_journal_entry_id uuid;
   v_release_key text;
 BEGIN
   IF p_client_id IS NULL OR p_errand_id IS NULL THEN
@@ -244,6 +386,32 @@ BEGIN
     v_amount, v_payout, v_commission, 'NGN', 'recognized',
     'escrow_release', pg_catalog.now()
   );
+
+  INSERT INTO public.financial_journal_entries (
+    source_type, source_id, currency, debit_total, credit_total, status
+  )
+  VALUES (
+    'errand_release', p_errand_id, 'NGN', v_amount, v_amount, 'posted'
+  )
+  RETURNING id
+  INTO v_journal_entry_id;
+
+  INSERT INTO public.financial_journal_lines (
+    journal_entry_id, account_code, side, amount, currency, user_id
+  )
+  VALUES
+    (v_journal_entry_id, 'client_escrow_liability', 'debit', v_amount, 'NGN', p_client_id),
+    (v_journal_entry_id, 'runner_wallet_liability', 'credit', v_payout, 'NGN', v_errand.assigned_runner_id);
+
+  IF v_commission > 0 THEN
+    INSERT INTO public.financial_journal_lines (
+      journal_entry_id, account_code, side, amount, currency, user_id
+    )
+    VALUES (
+      v_journal_entry_id, 'platform_commission_revenue', 'credit',
+      v_commission, 'NGN', NULL
+    );
+  END IF;
 
   UPDATE public.errands
   SET
