@@ -16,6 +16,31 @@ import { AuthContext } from "../context/AuthContext";
 import { supabase } from "@ers/auth";
 import { setApiAuthToken } from "../services/api";
 
+async function resolveApplicationUser(authUser: User | null): Promise<User | null> {
+  if (!authUser) return null;
+
+  const { data: profile, error } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", authUser.id)
+    .maybeSingle();
+
+  if (error) {
+    console.warn("[AuthProvider] Failed to resolve application role:", error.message);
+  }
+
+  return {
+    ...authUser,
+    user_metadata: {
+      ...authUser.user_metadata,
+      // Role comes from the RLS-protected application profile, never from
+      // client-controlled signup metadata.
+      role: profile?.role ?? "client",
+    },
+  };
+}
+
+
 interface Props {
   children: ReactNode;
 }
@@ -50,7 +75,7 @@ useEffect(() => {
         setAccessToken(currentSession?.access_token ?? null);
         setApiAuthToken(currentSession?.access_token ?? null);
 
-        setUser(currentSession?.user ?? null);
+        setUser(await resolveApplicationUser(currentSession?.user ?? null));
 
         setLoading(false);
 
@@ -65,14 +90,14 @@ useEffect(() => {
     const {
         data: listener,
     } = supabase.auth.onAuthStateChange(
-        (_event: AuthChangeEvent, session: Session | null) => {
+        async (_event: AuthChangeEvent, session: Session | null) => {
 
             setSession(session);
 
             setAccessToken(session?.access_token ?? null);
             setApiAuthToken(session?.access_token ?? null);
 
-            setUser(session?.user ?? null);
+            setUser(await resolveApplicationUser(session?.user ?? null));
 
         }
     );
