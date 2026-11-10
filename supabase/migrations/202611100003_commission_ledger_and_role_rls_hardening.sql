@@ -544,6 +544,15 @@ BEGIN
     RAISE EXCEPTION 'Only pending KYC applications can be approved';
   END IF;
 
+  IF NULLIF(pg_catalog.btrim(v_kyc.full_name), '') IS NULL
+     OR NULLIF(pg_catalog.btrim(v_kyc.phone), '') IS NULL
+     OR NULLIF(pg_catalog.btrim(v_kyc.bvn), '') IS NULL
+     OR NULLIF(pg_catalog.btrim(v_kyc.bank_code), '') IS NULL
+     OR NULLIF(pg_catalog.btrim(v_kyc.account_number), '') IS NULL
+     OR NULLIF(pg_catalog.btrim(v_kyc.account_name), '') IS NULL THEN
+    RAISE EXCEPTION 'KYC application is missing required identity or bank verification fields';
+  END IF;
+
   SELECT *
     INTO v_profile
   FROM public.profiles
