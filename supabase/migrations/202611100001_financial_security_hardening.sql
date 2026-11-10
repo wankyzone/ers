@@ -21,7 +21,7 @@ BEGIN
     RAISE EXCEPTION 'Transfer reference is required';
   END IF;
 
-  IF p_outcome NOT IN ('completed', 'failed') THEN
+  IF p_outcome IS NULL OR p_outcome NOT IN ('completed', 'failed') THEN
     RAISE EXCEPTION 'Invalid transfer outcome';
   END IF;
 
