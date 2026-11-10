@@ -445,6 +445,18 @@ test('escrow release rejects a stored runner payout outside the approved 80 perc
     'invalid payout must not credit runner funds'
   );
 
+  assert.equal(
+    await psql(`SELECT count(*) FROM public.platform_commission_entries WHERE errand_id = '${IDS.errand}';`),
+    '0',
+    'invalid payout must not recognize ERS commission'
+  );
+
+  assert.equal(
+    await psql(`SELECT count(*) FROM public.financial_journal_entries WHERE source_id = '${IDS.errand}';`),
+    '0',
+    'invalid payout must not post a general-ledger journal'
+  );
+
   await cleanup();
 });
 
