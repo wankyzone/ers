@@ -127,50 +127,6 @@ AFTER INSERT OR UPDATE ON public.financial_journal_lines
 DEFERRABLE INITIALLY DEFERRED
 FOR EACH ROW EXECUTE FUNCTION public.assert_financial_journal_balanced();
 
--- Build balanced journals for the historical commission rows without changing
--- existing wallet balances or runner payouts.
-INSERT INTO public.financial_journal_entries (
-  source_type, source_id, currency, debit_total, credit_total, status, created_at
-)
-SELECT
-  'errand_release', c.errand_id, c.currency,
-  c.gross_amount, c.gross_amount, 'posted', c.recognized_at
-FROM public.platform_commission_entries c
-WHERE c.status = 'recognized'
-ON CONFLICT (source_type, source_id) DO NOTHING;
-
-INSERT INTO public.financial_journal_lines (
-  journal_entry_id, account_code, side, amount, currency, user_id
-)
-SELECT
-  j.id, 'client_escrow_liability', 'debit', c.gross_amount, c.currency, c.client_id
-FROM public.financial_journal_entries j
-JOIN public.platform_commission_entries c ON c.errand_id = j.source_id
-WHERE j.source_type = 'errand_release'
-ON CONFLICT (journal_entry_id, account_code) DO NOTHING;
-
-INSERT INTO public.financial_journal_lines (
-  journal_entry_id, account_code, side, amount, currency, user_id
-)
-SELECT
-  j.id, 'runner_wallet_liability', 'credit', c.runner_amount, c.currency, c.runner_id
-FROM public.financial_journal_entries j
-JOIN public.platform_commission_entries c ON c.errand_id = j.source_id
-WHERE j.source_type = 'errand_release'
-ON CONFLICT (journal_entry_id, account_code) DO NOTHING;
-
-INSERT INTO public.financial_journal_lines (
-  journal_entry_id, account_code, side, amount, currency, user_id
-)
-SELECT
-  j.id, 'platform_commission_revenue', 'credit', c.commission_amount, c.currency, NULL
-FROM public.financial_journal_entries j
-JOIN public.platform_commission_entries c ON c.errand_id = j.source_id
-WHERE j.source_type = 'errand_release'
-  AND c.commission_amount > 0
-ON CONFLICT (journal_entry_id, account_code) DO NOTHING;
-
-
 ALTER TABLE public.platform_commission_entries ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON TABLE public.platform_commission_entries FROM PUBLIC, anon, authenticated;
 GRANT SELECT, INSERT ON TABLE public.platform_commission_entries TO service_role;
@@ -213,6 +169,52 @@ WHERE e.status = 'confirmed'
   AND COALESCE(e.payout_amount, pg_catalog.floor(e.price * 0.8)) >= 0
   AND COALESCE(e.payout_amount, pg_catalog.floor(e.price * 0.8)) <= e.price
 ON CONFLICT (errand_id) DO NOTHING;
+
+-- Build balanced journals for the historical commission rows without changing
+-- existing wallet balances or runner payouts.
+INSERT INTO public.financial_journal_entries (
+  source_type, source_id, currency, debit_total, credit_total, status, created_at
+)
+SELECT
+  'errand_release', c.errand_id, c.currency,
+  c.gross_amount, c.gross_amount, 'posted', c.recognized_at
+FROM public.platform_commission_entries c
+WHERE c.status = 'recognized'
+ON CONFLICT (source_type, source_id) DO NOTHING;
+
+INSERT INTO public.financial_journal_lines (
+  journal_entry_id, account_code, side, amount, currency, user_id
+)
+SELECT
+  j.id, 'client_escrow_liability', 'debit', c.gross_amount, c.currency, c.client_id
+FROM public.financial_journal_entries j
+JOIN public.platform_commission_entries c ON c.errand_id = j.source_id
+WHERE j.source_type = 'errand_release'
+ON CONFLICT (journal_entry_id, account_code) DO NOTHING;
+
+INSERT INTO public.financial_journal_lines (
+  journal_entry_id, account_code, side, amount, currency, user_id
+)
+SELECT
+  j.id, 'runner_wallet_liability', 'credit', c.runner_amount, c.currency, c.runner_id
+FROM public.financial_journal_entries j
+JOIN public.platform_commission_entries c ON c.errand_id = j.source_id
+WHERE j.source_type = 'errand_release'
+  AND c.runner_amount > 0
+ON CONFLICT (journal_entry_id, account_code) DO NOTHING;
+
+INSERT INTO public.financial_journal_lines (
+  journal_entry_id, account_code, side, amount, currency, user_id
+)
+SELECT
+  j.id, 'platform_commission_revenue', 'credit', c.commission_amount, c.currency, NULL
+FROM public.financial_journal_entries j
+JOIN public.platform_commission_entries c ON c.errand_id = j.source_id
+WHERE j.source_type = 'errand_release'
+  AND c.commission_amount > 0
+ON CONFLICT (journal_entry_id, account_code) DO NOTHING;
+
+
 
 -- Quarantine invalid historical amounts for manual reconciliation.
 INSERT INTO public.platform_commission_reconciliation_exceptions (
@@ -399,9 +401,20 @@ BEGIN
   INSERT INTO public.financial_journal_lines (
     journal_entry_id, account_code, side, amount, currency, user_id
   )
-  VALUES
-    (v_journal_entry_id, 'client_escrow_liability', 'debit', v_amount, 'NGN', p_client_id),
-    (v_journal_entry_id, 'runner_wallet_liability', 'credit', v_payout, 'NGN', v_errand.assigned_runner_id);
+  VALUES (
+    v_journal_entry_id, 'client_escrow_liability', 'debit',
+    v_amount, 'NGN', p_client_id
+  );
+
+  IF v_payout > 0 THEN
+    INSERT INTO public.financial_journal_lines (
+      journal_entry_id, account_code, side, amount, currency, user_id
+    )
+    VALUES (
+      v_journal_entry_id, 'runner_wallet_liability', 'credit',
+      v_payout, 'NGN', v_errand.assigned_runner_id
+    );
+  END IF;
 
   IF v_commission > 0 THEN
     INSERT INTO public.financial_journal_lines (
@@ -630,6 +643,12 @@ USING (
   OR (
     status = 'created'
     AND escrow_status = 'locked'
+    AND EXISTS (
+      SELECT 1
+      FROM public.profiles p
+      WHERE p.id = (SELECT auth.uid())
+        AND p.role = 'runner'
+    )
   )
 );
 
