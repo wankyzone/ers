@@ -6,7 +6,8 @@
 
 CREATE OR REPLACE FUNCTION public.settle_paystack_withdrawal_atomic(
   p_reference text,
-  p_outcome text
+  p_outcome text,
+  p_provider_amount_kobo bigint
 )
 RETURNS public.transactions
 LANGUAGE plpgsql
@@ -34,6 +35,16 @@ BEGIN
 
   IF v_transaction.id IS NULL THEN
     RAISE EXCEPTION 'Withdrawal transaction not found';
+  END IF;
+
+  IF v_transaction.payment_provider IS NOT NULL
+     AND v_transaction.payment_provider IS DISTINCT FROM 'paystack' THEN
+    RAISE EXCEPTION 'Withdrawal reference belongs to another provider';
+  END IF;
+
+  IF p_provider_amount_kobo IS NULL OR p_provider_amount_kobo <= 0
+     OR p_provider_amount_kobo <> pg_catalog.round(v_transaction.amount * 100)::bigint THEN
+    RAISE EXCEPTION 'Transfer amount mismatch';
   END IF;
 
   IF v_transaction.status = p_outcome THEN
@@ -74,6 +85,6 @@ BEGIN
 END;
 $$;
 
-REVOKE ALL ON FUNCTION public.settle_paystack_withdrawal_atomic(text, text) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.settle_paystack_withdrawal_atomic(text, text, bigint) FROM PUBLIC;
 REVOKE EXECUTE ON FUNCTION public.settle_paystack_withdrawal_atomic(text, text) FROM anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.settle_paystack_withdrawal_atomic(text, text) TO service_role;
