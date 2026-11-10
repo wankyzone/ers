@@ -148,6 +148,33 @@ Therefore:
 
 This website integration is a separate workstream and is not modified by this backend PR.
 
+## Live Supabase read-only verification — 10 November 2026
+
+Connected project: `ers-backend` (`acspvovspjhqeboqbgjh`, `eu-west-2`). The project reports `ACTIVE_HEALTHY`. No production DDL or data mutation was performed during this inspection.
+
+### Migration state
+
+The live migration history ends at `20260909103216_sprint6_paystack_wallet_funding`. The proposed November financial-security migrations are not applied.
+
+### Confirmed live catalog findings
+
+- `public.handle_new_user()` is SECURITY DEFINER and inserts `new.raw_user_meta_data ->> 'role'`, defaulting to `client`. This is not the hardened client-only signup implementation.
+- `anon` and `authenticated` both currently have EXECUTE on `handle_new_user()`.
+- The live `auth.users` trigger is still named `on_auth_user_created`; the proposed migration replaces it with one trigger bound to the hardened function.
+- The live `profiles` table has several overlapping INSERT policies, including `WITH CHECK (true)`; it also has overlapping SELECT and UPDATE policies.
+- The live `errands` table still has client INSERT/UPDATE and runner UPDATE policies.
+- The live database grants table privileges to both `anon` and `authenticated` across all 18 existing public tables, including `wallets`, `transactions`, `kyc_profiles`, `audit_logs`, and `users`.
+- Default privileges for both `postgres` and `supabase_admin` grant broad table, sequence, and function privileges to client roles.
+- All 18 current public tables have RLS enabled, but 13 have no policies. This is deny-by-default at the RLS layer only where client grants are present; broad table grants remain and must be revoked.
+- The Supabase Security Advisor also reports leaked-password protection disabled.
+
+### Proposed migration changes after live review
+
+The branch migration now revokes client privileges across all existing public tables and sequences, not just a hard-coded subset, grants service-role table access, and revokes client defaults for both `postgres` and `supabase_admin`. The security regression tests now check the actual seven-argument `create_errand_atomic` signature, the signup trigger function grants, default privileges, and legacy table grants.
+
+### Validation still outstanding
+
+The migration has not yet been executed against an isolated database. A temporary Supabase development branch is required to verify the DDL, historical commission backfill, trigger binding, default privileges, RLS behavior, and integration tests before any production rollout.
 ## Remaining production gates
 
 1. **Local database validation:** apply all three migrations to a disposable Supabase instance; verify function creation, deferred journal constraints, RLS, grants, and historical backfill.
