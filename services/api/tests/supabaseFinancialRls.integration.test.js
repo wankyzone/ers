@@ -130,6 +130,18 @@ test('financial and identity tables have RLS enabled and client grants are least
   );
 });
 
+test('exactly one hardened signup trigger is bound to the auth profile function', async () => {
+  const count = await psql(`
+    SELECT count(*)
+    FROM pg_catalog.pg_trigger
+    WHERE tgrelid = 'auth.users'::regclass
+      AND tgfoid = 'public.handle_new_user()'::regprocedure
+      AND NOT tgisinternal;
+  `);
+
+  assert.equal(count, '1');
+});
+
 test('privileged financial RPCs are not executable by anon or authenticated', async () => {
   const grants = await psql(`
     SELECT
@@ -138,10 +150,14 @@ test('privileged financial RPCs are not executable by anon or authenticated', as
       has_function_privilege('service_role', 'public.release_escrow_atomic(uuid,uuid)', 'EXECUTE'),
       has_function_privilege('anon', 'public.approve_runner_kyc_atomic(uuid)', 'EXECUTE'),
       has_function_privilege('authenticated', 'public.approve_runner_kyc_atomic(uuid)', 'EXECUTE'),
-      has_function_privilege('service_role', 'public.approve_runner_kyc_atomic(uuid)', 'EXECUTE');
+      has_function_privilege('service_role', 'public.approve_runner_kyc_atomic(uuid)', 'EXECUTE'),
+      has_function_privilege('anon', 'public.create_errand_atomic(uuid,text,text,numeric,text)', 'EXECUTE'),
+      has_function_privilege('authenticated', 'public.create_errand_atomic(uuid,text,text,numeric,text)', 'EXECUTE'),
+      has_function_privilege('service_role', 'public.create_errand_atomic(uuid,text,text,numeric,text)', 'EXECUTE'),
+      has_function_privilege('authenticated', 'public.credit_paystack_wallet_atomic(uuid,text,numeric)', 'EXECUTE');
   `);
 
-  assert.equal(grants, 'f|f|t|f|f|t');
+  assert.equal(grants, 'f|f|t|f|f|t|f|f|t|f');
 });
 
 after(async () => {
