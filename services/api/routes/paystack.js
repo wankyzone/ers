@@ -15,7 +15,7 @@ router.get('/banks', async (_req, res) => {
 /* ─────────────────────────────
    RESOLVE ACCOUNT
 ───────────────────────────── */
-router.post('/resolve-account', async (req, res) => {
+router.post('/resolve-account', authenticate, async (req, res) => {
   const { account_number, bank_code } = req.body;
 
   if (!account_number || !bank_code) {
@@ -43,7 +43,7 @@ router.post('/resolve-account', async (req, res) => {
   }
 });
 
-router.post('/resolve', async (req, res) => {
+router.post('/resolve', authenticate, async (req, res) => {
   req.url = '/resolve-account';
   return router.handle(req, res);
 });
