@@ -763,7 +763,7 @@ ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public
 -- executor is that role or a member of it. Managed Supabase commonly denies
 -- this membership, so do not make the whole migration fail on this optional
 -- owner-specific hardening. Emit an explicit notice for the deployment gate.
-DO $
+DO $block$
 BEGIN
   IF current_user = 'supabase_admin'
      OR pg_catalog.pg_has_role(current_user, 'supabase_admin', 'MEMBER') THEN
@@ -774,4 +774,4 @@ BEGIN
     RAISE NOTICE 'Skipped supabase_admin default privileges: migration role % is not a member of supabase_admin. Review this owner-specific setting with Supabase before production approval.', current_user;
   END IF;
 END;
-$;
+$block$;
