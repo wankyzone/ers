@@ -52,16 +52,7 @@ test('E2E marketplace: client creates errand and runner accepts it', async () =>
 
   assert.ifError(clientUserError);
 
-  const { error: clientProfileError } = await adminSupabase
-    .from('profiles')
-    .insert({
-      id: clientId,
-      email: clientEmail,
-      role: 'client',
-      verified: true,
-    });
-
-  assert.ifError(clientProfileError);
+  // The Auth trigger creates the default client profile.
 
   const { error: walletError } = await adminSupabase
     .from('wallets')
@@ -101,14 +92,15 @@ test('E2E marketplace: client creates errand and runner accepts it', async () =>
 
   assert.ifError(runnerUserError);
 
+  // Trusted service-role fixture promotion; public signup metadata cannot set roles.
   const { error: runnerProfileError } = await adminSupabase
     .from('profiles')
-    .insert({
+    .upsert({
       id: runnerId,
       email: runnerEmail,
       role: 'runner',
       verified: true,
-    });
+    }, { onConflict: 'id' });
 
   assert.ifError(runnerProfileError);
 
@@ -460,6 +452,35 @@ test.after(async () => {
   }
 
   if (createdErrandId) {
+    const { data: journalEntries } = await adminSupabase
+      .from('financial_journal_entries')
+      .select('id')
+      .eq('source_id', createdErrandId);
+
+    const journalIds = (journalEntries ?? []).map((entry) => entry.id);
+
+    if (journalIds.length) {
+      await adminSupabase
+        .from('financial_journal_lines')
+        .delete()
+        .in('journal_entry_id', journalIds);
+    }
+
+    await adminSupabase
+      .from('financial_journal_entries')
+      .delete()
+      .eq('source_id', createdErrandId);
+
+    await adminSupabase
+      .from('platform_commission_reconciliation_exceptions')
+      .delete()
+      .eq('errand_id', createdErrandId);
+
+    await adminSupabase
+      .from('platform_commission_entries')
+      .delete()
+      .eq('errand_id', createdErrandId);
+
     await adminSupabase
       .from('transactions')
       .delete()
