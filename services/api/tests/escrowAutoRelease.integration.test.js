@@ -35,6 +35,31 @@ async function psql(sql) {
 
 async function cleanup() {
   await psql(`
+    DELETE FROM public.financial_journal_lines
+    WHERE journal_entry_id IN (
+      SELECT id FROM public.financial_journal_entries
+      WHERE source_id IN (
+        '${IDS.eligibleErrand}', '${IDS.ineligibleErrand}', '${IDS.failureErrand}'
+      )
+    );
+
+    DELETE FROM public.financial_journal_entries
+    WHERE source_id IN (
+      '${IDS.eligibleErrand}', '${IDS.ineligibleErrand}', '${IDS.failureErrand}'
+    );
+
+    DELETE FROM public.platform_commission_reconciliation_exceptions
+    WHERE errand_id IN (
+      '${IDS.eligibleErrand}', '${IDS.ineligibleErrand}', '${IDS.failureErrand}'
+    );
+
+    DELETE FROM public.platform_commission_entries
+    WHERE errand_id IN (
+      '${IDS.eligibleErrand}', '${IDS.ineligibleErrand}', '${IDS.failureErrand}'
+    );
+  `);
+
+  await psql(`
     DELETE FROM public.transactions
     WHERE errand_id IN (
       '${IDS.eligibleErrand}',
