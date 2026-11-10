@@ -629,6 +629,23 @@ BEGIN
   RETURNING *
   INTO v_profile;
 
+  -- Runner dispatch requires a corresponding operational runner record.
+  -- Create it as part of the same approval transaction.
+  INSERT INTO public.runners (
+    id, name, email, total_earnings, is_available
+  )
+  VALUES (
+    v_profile.id,
+    v_kyc.full_name,
+    v_profile.email,
+    0,
+    true
+  )
+  ON CONFLICT (id) DO UPDATE
+  SET
+    name = EXCLUDED.name,
+    email = COALESCE(EXCLUDED.email, public.runners.email);
+
   RETURN v_profile;
 END;
 $$;
