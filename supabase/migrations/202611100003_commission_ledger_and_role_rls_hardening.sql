@@ -627,6 +627,8 @@ ALTER TABLE public.jobs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.job_logs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.system_logs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.orchestrator_retry_log ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.runners ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.audit_logs ENABLE ROW LEVEL SECURITY;
 
 -- Remove any client write policies on wallets and retain only self-read.
 DROP POLICY IF EXISTS "Users can update own wallet" ON public.wallets;
