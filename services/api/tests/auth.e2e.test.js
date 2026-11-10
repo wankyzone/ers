@@ -152,6 +152,11 @@ test('E2E marketplace: client creates errand and runner accepts it', async () =>
 
   const baseUrl = `http://127.0.0.1:${port}`;
 
+  const unauthenticatedWalletResponse = await fetch(`${baseUrl}/api/wallet`, {
+    headers: { 'x-user-id': clientId },
+  });
+  assert.equal(unauthenticatedWalletResponse.status, 401);
+
   /*
    * ============================================================
    * 5. CLIENT CREATES ERRAND
@@ -337,6 +342,22 @@ test('E2E marketplace: client creates errand and runner accepts it', async () =>
   assert.equal(Number(runnerWalletAfterRelease.available_balance), Number(errand.payout_amount));
   assert.equal(Number(runnerWalletAfterRelease.balance), Number(errand.payout_amount));
   assert.equal(Number(runnerWalletAfterRelease.escrow_balance), 0);
+
+  const spoofedWalletResponse = await fetch(`${baseUrl}/api/wallet`, {
+    headers: {
+      Authorization: `Bearer ${runnerAuth.accessToken}`,
+      'x-user-id': clientId,
+    },
+  });
+  assert.equal(spoofedWalletResponse.status, 200);
+  const spoofedWallet = await spoofedWalletResponse.json();
+  assert.equal(spoofedWallet.user_id, runnerId);
+
+  const crossUserTransactionsResponse = await fetch(
+    `${baseUrl}/api/transactions/${clientId}`,
+    { headers: { Authorization: `Bearer ${runnerAuth.accessToken}` } }
+  );
+  assert.equal(crossUserTransactionsResponse.status, 403);
 
   const { data: releaseTransactions, error: releaseTransactionsError } =
     await adminSupabase
