@@ -77,31 +77,19 @@ export async function getTotalClients() {
 }
 
 export async function getRevenue() {
-  // Sum platform commission (price - payout_amount) for finalized errands.
-  // Only confirmed errands with released escrow are counted.
-  // If payout_amount is null, use 80% convention (price * 0.2 commission).
   const { data, error } = await supabase
-    .from('errands')
-    .select('price, payout_amount')
-    .eq('status', 'confirmed')
-    .eq('escrow_status', 'released');
+    .from('platform_commission_entries')
+    .select('commission_amount')
+    .eq('status', 'recognized');
 
   if (error) {
-    throw new Error(`Failed to fetch revenue data: ${error.message}`);
+    throw new Error(`Failed to fetch platform commission ledger: ${error.message}`);
   }
 
-  if (!data || data.length === 0) {
-    return 0;
-  }
-
-  const revenue = (data ?? []).reduce((sum, errand) => {
-    const price = Number(errand.price ?? 0);
-    const payoutAmount = errand.payout_amount != null ? Number(errand.payout_amount) : Math.floor(price * 0.8);
-    const commission = price - payoutAmount;
-    return sum + commission;
-  }, 0);
-
-  return revenue;
+  return (data ?? []).reduce(
+    (sum, entry) => sum + Number(entry.commission_amount ?? 0),
+    0,
+  );
 }
 
 export async function getWalletBalance() {
