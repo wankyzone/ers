@@ -1,13 +1,13 @@
 import express from 'express';
 import bcrypt from 'bcryptjs';
 import supabase from '../supabase.js';
-import { authenticate } from '../modules/protect/index.js';
+import { authenticate, authorize } from '../modules/protect/index.js';
 
 const router = express.Router();
 
 // ─── SET PIN ─────────────────────────────────────
 
-router.post('/set', authenticate, async (req, res) => {
+router.post('/set', authenticate, authorize('runner'), async (req, res) => {
   const userId = req.user.id;
   const { pin } = req.body;
 
@@ -37,14 +37,14 @@ router.post('/set', authenticate, async (req, res) => {
   }
 });
 
-router.post('/create', async (req, res) => {
+router.post('/create', authenticate, authorize('runner'), async (req, res) => {
   req.url = '/set';
   return router.handle(req, res);
 });
 
 // ─── VERIFY PIN ─────────────────────────────────
 
-router.post('/verify', authenticate, async (req, res) => {
+router.post('/verify', authenticate, authorize('runner'), async (req, res) => {
   const userId = req.user.id;
   const { pin } = req.body;
 
