@@ -132,6 +132,38 @@ test('financial and identity tables have RLS enabled and client grants are least
   );
 });
 
+test('default privileges for both public-schema object owners exclude client roles', async () => {
+  const exposedDefaults = await psql(`
+    SELECT count(*)
+    FROM pg_catalog.pg_default_acl d
+    CROSS JOIN LATERAL pg_catalog.aclexplode(d.defaclacl) a
+    WHERE d.defaclnamespace = 'public'::regnamespace
+      AND d.defaclrole IN (
+        'postgres'::regrole,
+        'supabase_admin'::regrole
+      )
+      AND a.grantee IN (
+        0,
+        'anon'::regrole,
+        'authenticated'::regrole
+      );
+  `);
+
+  assert.equal(exposedDefaults, '0');
+});
+
+test('no client role has table privileges on legacy operational tables', async () => {
+  const privileges = await psql(`
+    SELECT
+      has_table_privilege('anon', 'public.tasks', 'SELECT'),
+      has_table_privilege('authenticated', 'public.tasks', 'SELECT'),
+      has_table_privilege('anon', 'public.audit_logs', 'INSERT'),
+      has_table_privilege('authenticated', 'public.transactions', 'SELECT');
+  `);
+
+  assert.equal(privileges, 'f|f|f|f');
+});
+
 test('exactly one hardened signup trigger is bound to the auth profile function', async () => {
   const count = await psql(`
     SELECT count(*)
@@ -147,11 +179,11 @@ test('exactly one hardened signup trigger is bound to the auth profile function'
 test('profile, wallet, and errand policies contain only the intended access rules', async () => {
   const policies = await psql(`
     SELECT
-      (SELECT string_agg(policyname, ',') FROM pg_catalog.pg_policies
+      (SELECT string_agg(policyname, ',' ORDER BY policyname) FROM pg_catalog.pg_policies
        WHERE schemaname = 'public' AND tablename = 'profiles'),
-      (SELECT string_agg(policyname, ',') FROM pg_catalog.pg_policies
+      (SELECT string_agg(policyname, ',' ORDER BY policyname) FROM pg_catalog.pg_policies
        WHERE schemaname = 'public' AND tablename = 'wallets'),
-      (SELECT string_agg(policyname, ',') FROM pg_catalog.pg_policies
+      (SELECT string_agg(policyname, ',' ORDER BY policyname) FROM pg_catalog.pg_policies
        WHERE schemaname = 'public' AND tablename = 'errands');
   `);
 
@@ -170,13 +202,16 @@ test('privileged financial RPCs are not executable by anon or authenticated', as
       has_function_privilege('anon', 'public.approve_runner_kyc_atomic(uuid)', 'EXECUTE'),
       has_function_privilege('authenticated', 'public.approve_runner_kyc_atomic(uuid)', 'EXECUTE'),
       has_function_privilege('service_role', 'public.approve_runner_kyc_atomic(uuid)', 'EXECUTE'),
-      has_function_privilege('anon', 'public.create_errand_atomic(uuid,text,text,numeric,text)', 'EXECUTE'),
+      has_function_privilege('anon', 'public.create_errand_atomic(uuid,text,text,text,text,numeric,text)', 'EXECUTE'),
       has_function_privilege('authenticated', 'public.create_errand_atomic(uuid,text,text,numeric,text)', 'EXECUTE'),
       has_function_privilege('service_role', 'public.create_errand_atomic(uuid,text,text,numeric,text)', 'EXECUTE'),
-      has_function_privilege('authenticated', 'public.credit_paystack_wallet_atomic(uuid,text,numeric)', 'EXECUTE');
+      has_function_privilege('authenticated', 'public.credit_paystack_wallet_atomic(uuid,text,numeric)', 'EXECUTE'),
+      has_function_privilege('anon', 'public.handle_new_user()', 'EXECUTE'),
+      has_function_privilege('authenticated', 'public.handle_new_user()', 'EXECUTE'),
+      has_function_privilege('service_role', 'public.settle_paystack_withdrawal_atomic(text,text,bigint)', 'EXECUTE');
   `);
 
-  assert.equal(grants, 'f|f|t|f|f|t|f|f|t|f');
+  assert.equal(grants, 'f|f|t|f|f|t|f|f|t|f|f|f|t');
 });
 
 after(async () => {
