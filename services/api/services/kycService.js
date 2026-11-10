@@ -123,90 +123,18 @@ export async function getPendingKycs() {
 }
 
 export async function approveKyc(kycId) {
-  // Step 1: Find the KYC record
-  const { data: kyc, error: kycError } = await supabase
-    .from("kyc_profiles")
-    .select("*")
-    .eq("id", kycId)
-    .single();
+  const { data, error } = await supabase.rpc('approve_runner_kyc_atomic', {
+    p_kyc_id: kycId,
+  });
 
-  if (kycError) {
-    throw new Error(kycError.message);
+  if (error) {
+    throw new Error(error.message);
   }
 
-  if (!kyc) {
-    throw new Error("KYC record not found.");
-  }
-
-  // Step 2: Find the associated profile
-  const { data: profile, error: profileError } = await supabase
-    .from("profiles")
-    .select("id, role, verified")
-    .eq("id", kyc.user_id)
-    .single();
-
-  if (profileError) {
-    throw new Error(profileError.message);
-  }
-
-  if (!profile) {
-    throw new Error("User not found.");
-  }
-
-  // Step 3: Only runners can be KYC verified
-  if (profile.role !== "runner") {
-    return {
-      success: false,
-      message: "Only runner accounts can be KYC verified.",
-    };
-  }
-
-  // Step 4: Only pending KYC can be approved
-  if (kyc.status !== "pending") {
-    return {
-      success: false,
-      message: `Cannot approve a ${kyc.status} KYC submission.`,
-    };
-  }
-
-  // Step 5: Approve the KYC
-  const { data: updatedKyc, error: updateError } = await supabase
-    .from("kyc_profiles")
-    .update({
-      status: "approved",
-    })
-    .eq("id", kycId)
-    .select()
-    .single();
-
-  if (updateError) {
-    throw new Error(updateError.message);
-  }
-
-  // Step 6: Mark the runner as verified
-  console.log("Updating runner:", profile.id);
-
-const { data: updatedProfile, error: runnerUpdateError } = await supabase
-  .from("profiles")
-  .update({
-    verified: true,
-  })
-  .eq("id", profile.id)
-  .select()
-  .single();
-
-console.log("Updated profile:", updatedProfile);
-console.log("Update error:", runnerUpdateError);
-
-if (runnerUpdateError) {
-  throw new Error(runnerUpdateError.message);
-}
-
-  // Step 7: Return success
   return {
     success: true,
-    message: "KYC approved successfully.",
-    data: updatedKyc,
+    message: 'KYC approved and runner access granted.',
+    data,
   };
 }
 
@@ -258,7 +186,7 @@ export async function rejectKyc(kycId, reason) {
   const profile = profileData[0];
 
   // Step 3: Only runners can have KYC rejected
-  if (profile.role !== "runner") {
+  if (!["client", "runner"].includes(profile.role)) {
     return {
       success: false,
       message: "Only runner accounts can be KYC reviewed.",
@@ -309,15 +237,7 @@ export async function rejectKyc(kycId, reason) {
 
   const resultKyc = updatedKycData[0];
 
-  // Step 7: Ensure runner stays unverified
-  await supabase
-    .from("profiles")
-    .update({
-      verified: false,
-    })
-    .eq("id", profile.id);
-
-  // Step 8: Return success
+  // Return success
   return {
     success: true,
     message: "KYC rejected successfully.",
