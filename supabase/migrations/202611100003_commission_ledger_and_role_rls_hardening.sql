@@ -461,8 +461,9 @@ USING (
 REVOKE ALL ON TABLE public.profiles, public.wallets, public.transactions,
   public.payments, public.errands, public.errand_events, public.errand_logs,
   public.users, public.kyc_profiles, public.otp_codes, public.user_devices,
-  public.jobs, public.job_logs, public.system_logs, public.orchestrator_retry_log
-FROM anon, authenticated;
+  public.jobs, public.job_logs, public.system_logs, public.orchestrator_retry_log,
+  public.runners, public.audit_logs
+FROM PUBLIC, anon, authenticated;
 
 GRANT SELECT ON TABLE public.profiles, public.wallets, public.errands
 TO authenticated;
@@ -471,5 +472,15 @@ TO authenticated;
 GRANT ALL ON TABLE public.profiles, public.wallets, public.transactions,
   public.payments, public.errands, public.errand_events, public.errand_logs,
   public.users, public.kyc_profiles, public.otp_codes, public.user_devices,
-  public.jobs, public.job_logs, public.system_logs, public.orchestrator_retry_log
+  public.jobs, public.job_logs, public.system_logs, public.orchestrator_retry_log,
+  public.runners, public.audit_logs
 TO service_role;
+
+-- Recovered default privileges granted all future public objects to client roles.
+-- Revoke those defaults so newly created tables/functions are not exposed by default.
+ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public
+  REVOKE ALL ON TABLES FROM PUBLIC, anon, authenticated;
+ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public
+  REVOKE ALL ON SEQUENCES FROM PUBLIC, anon, authenticated;
+ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public
+  REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC, anon, authenticated;
