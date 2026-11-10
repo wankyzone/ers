@@ -168,10 +168,6 @@ export default function KycScreen({ navigation, route }: Props) {
         const { data, res } = await apiFetch('/paystack/resolve-account', {
           method: 'POST',
           // BUG 5 FIX: role is in user_metadata, not top-level user object
-          headers: {
-            'x-user-id': user.id,
-            'x-role': user.user_metadata?.role ?? 'client',
-          },
           body: JSON.stringify({
             account_number: debouncedAccount,
             bank_code: form.bank_code,
@@ -239,10 +235,6 @@ export default function KycScreen({ navigation, route }: Props) {
 
       const { data, res } = await apiFetch('/kyc/verify', {
         method: 'POST',
-        headers: {
-          'x-user-id': user.id,
-          'x-role': user.user_metadata?.role ?? 'client',
-        },
         body: JSON.stringify(form),
       });
 
