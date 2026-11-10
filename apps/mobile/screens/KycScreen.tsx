@@ -83,7 +83,7 @@ import {
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 
 import { useAuth } from '../src/context/AuthContext';
-import { apiFetch, addBankAccount } from '../src/services/api';
+import { apiFetch } from '../src/services/api';
 import type { AppStackParamList } from '../src/navigation/AppStack';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -255,17 +255,11 @@ export default function KycScreen({ navigation, route }: Props) {
          'verification failed'
       );
 
-      // BUG 4 FIX: actually save the bank account via API after KYC success
-      await addBankAccount({
-        bank_name: form.bank_name,
-        bank_code: form.bank_code,
-        account_number: form.account_number,
-        account_name: form.account_name,
-      });
+      Alert.alert(
+        'KYC Submitted',
+        'Your details have been submitted for review. Runner access will be enabled after approval.'
+      );
 
-      Alert.alert('KYC Complete ✅', 'Your account is now verified');
-
-      // BUG 1 FIX: replace setTab('wallet') with navigation
       navigation.navigate('Wallet');
 
     } catch (err: unknown) {
