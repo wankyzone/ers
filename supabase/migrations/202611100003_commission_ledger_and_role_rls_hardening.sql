@@ -58,7 +58,14 @@ CREATE TABLE IF NOT EXISTS public.financial_journal_lines (
   currency text NOT NULL DEFAULT 'NGN' CHECK (currency = 'NGN'),
   user_id uuid,
   created_at timestamptz NOT NULL DEFAULT now(),
-  CONSTRAINT financial_journal_account_once UNIQUE (journal_entry_id, account_code)
+  CONSTRAINT financial_journal_account_once UNIQUE (journal_entry_id, account_code),
+  CONSTRAINT financial_journal_account_side CHECK (
+    (account_code = 'client_escrow_liability' AND side = 'debit')
+    OR (
+      account_code IN ('runner_wallet_liability', 'platform_commission_revenue')
+      AND side = 'credit'
+    )
+  )
 );
 
 ALTER TABLE public.financial_journal_entries ENABLE ROW LEVEL SECURITY;
