@@ -25,6 +25,10 @@ import adminNotificationsRoutes from './routes/adminNotifications.js';
 import storageRoutes from './routes/storage.js';
 import { getApiHealth } from './modules/health.js';
 import { initSocket } from './server/socket.js';
+import {
+  authenticate,
+  authorizeCustomerOrRoles,
+} from './modules/protect/index.js';
 
 
 function listRoutes(router, prefix = '') {
@@ -52,7 +56,7 @@ export function createApiServer() {
 app.use(cors());
 
 app.use(
-  '/paystack/webhook',
+  ['/paystack/webhook', '/api/paystack/webhook'],
   express.raw({ type: 'application/json' })
 );
 
@@ -71,65 +75,58 @@ app.get('/health', (_req, res) => {
   res.json(getApiHealth());
 });
 
-app.get('/wallet', async (req, res) => {
-  try {
-    const userId = req.headers['x-user-id'];
+app.get(
+  '/wallet',
+  authenticate,
+  authorizeCustomerOrRoles('runner'),
+  async (req, res) => {
+    try {
+      const userId = req.user.id;
+      const { data, error } = await supabase
+        .from('wallets')
+        .select('balance, available_balance, escrow_balance')
+        .eq('user_id', userId)
+        .single();
 
-    if (!userId) {
-      return res.status(400).json({
-        success: false,
-        message: 'Missing x-user-id header',
-      });
-    }
+      if (error && error.code !== 'PGRST116') {
+        console.log('Wallet fetch error:', error);
+        return res.status(500).json({
+          success: false,
+          message: 'Failed to fetch wallet',
+        });
+      }
 
-    const { data, error } = await supabase
-      .from('wallets')
-      .select('*')
-      .eq('user_id', userId)
-      .single();
-
-    if (error && error.code !== 'PGRST116') {
-      console.log('Wallet fetch error:', error);
+      return res.json(
+        data ?? {
+          balance: 0,
+          available_balance: 0,
+          escrow_balance: 0,
+        }
+      );
+    } catch (err) {
+      console.log('Wallet route error:', err);
       return res.status(500).json({
         success: false,
-        message: 'Failed to fetch wallet',
+        message: 'Server error',
       });
     }
-
-    return res.json(data ?? {
-      balance: 0,
-      available_balance: 0,
-      escrow_balance: 0,
-    });
-  } catch (err) {
-    console.log('Wallet route error:', err);
-    return res.status(500).json({
-      success: false,
-      message: 'Server error',
-    });
   }
-});
+);
 
 app.get('/api/wallet', (req, res, next) => {
   req.url = '/wallet';
   return app.handle(req, res, next);
 });
 
-app.post('/withdraw', (_req, res) => {
-  res.json({
-    success: true,
-    message: 'Placeholder withdrawal endpoint',
-    requireOtp: false,
+const withdrawalsUnavailable = (_req, res) => {
+  res.status(503).json({
+    success: false,
+    message: 'Withdrawals are temporarily unavailable.',
   });
-});
+};
 
-app.post('/api/withdraw', (_req, res) => {
-  res.json({
-    success: true,
-    message: 'Placeholder withdrawal endpoint',
-    requireOtp: false,
-  });
-});
+app.post('/withdraw', withdrawalsUnavailable);
+app.post('/api/withdraw', withdrawalsUnavailable);
 
 app.use('/errands', errandsRouter);
 app.use('/transactions', transactionsRouter);

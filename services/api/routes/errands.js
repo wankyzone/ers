@@ -2,13 +2,20 @@ import express from 'express';
 import supabase from '../supabase.js';
 import axios from 'axios';
 import crypto from 'crypto';
-import { authenticate, authorize } from '../modules/protect/index.js';
+import {
+  authenticate,
+  authorize,
+  authorizeCustomer,
+  authorizeCustomerOrRoles,
+  authorizeActiveRunner,
+  hasActiveRunnerCapability,
+} from '../modules/protect/index.js';
 import { getRunnerErrandVisibilityFilter } from '../utils/errandVisibility.js';
 
 const router = express.Router();
 
 /* ================= CREATE ERRAND ================= */
-router.post('/', authenticate, authorize('client'), async (req, res) => {
+router.post('/', authenticate, authorizeCustomer(), async (req, res) => {
   try {
     const clientId = req.user.id;
     const { title, description, price } = req.body;
@@ -92,7 +99,7 @@ router.post('/', authenticate, authorize('client'), async (req, res) => {
 });
 
 /* ================= ACCEPT ================= */
-router.post('/:id/accept', authenticate, authorize('runner'), async (req, res) => {
+router.post('/:id/accept', authenticate, authorizeActiveRunner(), async (req, res) => {
   try {
     const runnerId = req.user.id;
     const { id } = req.params;
@@ -153,7 +160,7 @@ router.post('/:id/accept', authenticate, authorize('runner'), async (req, res) =
 });
 
 /* ================= COMPLETE ================= */
-router.post('/:id/complete', authenticate, authorize('runner'), async (req, res) => {
+router.post('/:id/complete', authenticate, authorizeActiveRunner(), async (req, res) => {
   try {
     const runnerId = req.user.id;
     const { id } = req.params;
@@ -207,7 +214,7 @@ router.post('/:id/complete', authenticate, authorize('runner'), async (req, res)
 });
 
 /* ================= CONFIRM (ESCROW RELEASE) ================= */
-router.post('/:id/confirm', authenticate, authorize('client'), async (req, res) => {
+router.post('/:id/confirm', authenticate, authorizeCustomer(), async (req, res) => {
   try {
     const clientId = req.user.id;
     const { id: errandId } = req.params;
@@ -267,127 +274,77 @@ router.post('/:id/confirm', authenticate, authorize('client'), async (req, res) 
 
 
 /* ================= WITHDRAW ================= */
-router.post('/paystack/withdraw', async (req, res) => {
-  const user_id = req.headers['x-runner-id'];
-  const { amount, recipient_code } = req.body;
-
-  const { data: wallet } = await supabase
-    .from('wallets')
-    .select('*')
-    .eq('user_id', user_id)
-    .single();
-
-  if (wallet.available_balance < amount) {
-    return res.status(400).json({ error: 'Insufficient balance' });
-  }
-
-  try {
-    const response = await axios.post(
-      'https://api.paystack.co/transfer',
-      {
-        source: 'balance',
-        amount: amount * 100,
-        recipient: recipient_code
-      },
-      {
-        headers: {
-          Authorization: `Bearer ${process.env.PAYSTACK_SECRET_KEY}`
-        }
-      }
-    );
-
-    await supabase
-  .from('wallets')
-  .update({
-    available_balance: wallet.available_balance - amount
-  })
-  .eq('user_id', user_id);
-
-    await supabase.from('transactions').insert([{
-      user_id,
-      amount,
-      type: 'withdraw',
-      status: 'pending',
-      reference: response.data.data.reference
-    }]);
-
-    res.json(response.data);
-  } catch (err) {
-    res.status(500).json({ error: 'Withdraw failed' });
-  }
+router.post('/paystack/withdraw', (_req, res) => {
+  return res.status(503).json({
+    success: false,
+    message: 'Withdrawals are temporarily unavailable.',
+  });
 });
 
 
 /* ================= GET ALL ERRANDS ================= */
-router.get('/', authenticate, async (req, res) => {
-  try {
-    const user_id = req.user.id;
-    const role = req.user.role;
+router.get(
+  '/',
+  authenticate,
+  authorizeCustomerOrRoles('runner'),
+  async (req, res) => {
+    try {
+      const user_id = req.user.id;
+      const role = req.user.role;
 
-    if (!role) {
-      return res.status(403).json({ error: 'User role is unavailable' });
+      if (!['client', 'runner'].includes(role)) {
+        return res.status(403).json({
+          success: false,
+          message: 'User role is not supported for errand listing.',
+        });
+      }
+
+      let query = supabase.from('errands').select('*');
+      const activeRunner =
+        role === 'runner' &&
+        req.user.emailVerified &&
+        req.user.verified === true &&
+        (await hasActiveRunnerCapability(user_id));
+
+      if (!activeRunner) {
+        query = query.eq('client_id', user_id);
+      }
+
+      if (activeRunner) {
+        query = query.or(getRunnerErrandVisibilityFilter(user_id));
+      }
+
+      const { data, error } = await query.order('created_at', {
+        ascending: false,
+      });
+
+      if (error) {
+        console.log('ERRANDS FETCH ERROR:', error);
+        return res.status(500).json({ error: 'Failed to fetch errands' });
+      }
+
+      res.json(data || []);
+    } catch (err) {
+      console.log('SERVER ERROR:', err);
+      res.status(500).json({ error: 'Server error' });
     }
-
-    let query = supabase.from('errands').select('*');
-
-    if (role === 'client') {
-      // Client sees ONLY their errands
-      query = query.eq('client_id', user_id);
-    }
-
-    if (role === 'runner') {
-      // Runner marketplace visibility:
-      // - unassigned errands in the 'created' state
-      // - their own active errands in the 'accepted' state
-      // - historical/completed/confirmed errands are excluded
-      query = query.or(
-        getRunnerErrandVisibilityFilter(user_id)
-      );
-    }
-
-    const { data, error } = await query.order('created_at', { ascending: false });
-
-    if (error) {
-      console.log('ERRANDS FETCH ERROR:', error);
-      return res.status(500).json({ error: 'Failed to fetch errands' });
-    }
-
-    res.json(data || []);
-  } catch (err) {
-    console.log('SERVER ERROR:', err);
-    res.status(500).json({ error: 'Server error' });
   }
-});
+);
 
 /* Paystack wallet funding is handled by routes/paystack.js. */
 
-router.post('/paystack/create-recipient', async (req, res) => {
-  const { account_number, bank_code, name } = req.body;
-
-  try {
-    const response = await axios.post(
-      'https://api.paystack.co/transferrecipient',
-      {
-        type: 'nuban',
-        name,
-        account_number,
-        bank_code,
-        currency: 'NGN'
-      },
-      {
-        headers: {
-          Authorization: `Bearer ${process.env.PAYSTACK_SECRET_KEY}`
-        }
-      }
-    );
-
-    res.json(response.data);
-  } catch (err) {
-    res.status(500).json({ error: 'Recipient failed' });
-  }
+router.post('/paystack/create-recipient', (_req, res) => {
+  return res.status(503).json({
+    success: false,
+    message: 'Recipient creation is temporarily unavailable.',
+  });
 });
 
-router.get('/transactions/:userId', authenticate, async (req, res) => {
+router.get(
+  '/transactions/:userId',
+  authenticate,
+  authorizeCustomerOrRoles('runner'),
+  async (req, res) => {
   const { userId } = req.params;
 
   if (userId !== req.user.id) {
@@ -403,9 +360,14 @@ router.get('/transactions/:userId', authenticate, async (req, res) => {
   if (error) return res.status(400).json({ error });
 
   res.json(data);
-});
+  }
+);
 
-router.get('/analytics/:userId', authenticate, async (req, res) => {
+router.get(
+  '/analytics/:userId',
+  authenticate,
+  authorizeCustomerOrRoles('runner'),
+  async (req, res) => {
   const { userId } = req.params;
 
   if (userId !== req.user.id) {
@@ -429,9 +391,14 @@ router.get('/analytics/:userId', authenticate, async (req, res) => {
     totalDeposits,
     totalWithdrawals
   });
-});
+  }
+);
 
-router.post('/:id/dispute', authenticate, async (req, res) => {
+router.post(
+  '/:id/dispute',
+  authenticate,
+  authorizeCustomerOrRoles('runner'),
+  async (req, res) => {
   const { id } = req.params;
   const userId = req.user.id;
 
@@ -469,9 +436,14 @@ router.post('/:id/dispute', authenticate, async (req, res) => {
   }
 
   res.json({ message: 'Dispute opened' });
-});
+  }
+);
 
-router.get('/wallet', authenticate, async (req, res) => {
+router.get(
+  '/wallet',
+  authenticate,
+  authorizeCustomerOrRoles('runner'),
+  async (req, res) => {
   try {
     const user_id = req.user.id;
 
@@ -490,7 +462,8 @@ router.get('/wallet', authenticate, async (req, res) => {
       return res.json({
         balance: 0,
         available_balance: 0
-      });
+        }
+      );
     }
 
     res.json(data);
@@ -501,133 +474,18 @@ router.get('/wallet', authenticate, async (req, res) => {
   }
 });
 
-router.post('/withdraw', authenticate, async (req, res) => {
-  const userId = req.user.id;
-  const { amount, pin } = req.body;
-
-  const user = await db.user.find(userId);
-
-  // ─── 1. COOLDOWN CHECK ─────────────────────────
-  if (user.cooldown_until && new Date() < user.cooldown_until) {
-    return res.status(403).json({
-      message: 'Account temporarily locked. Try again later.',
-    });
-  }
-
-  // ─── 2. PIN VALIDATION ─────────────────────────
-  const validPin = compareHash(pin, user.pin_hash);
-
-  if (!validPin) {
-    const attempts = user.pin_attempts + 1;
-
-    // lock user
-    if (attempts >= LIMITS.MAX_ATTEMPTS) {
-      await db.user.update(userId, {
-        pin_attempts: 0,
-        cooldown_until: new Date(Date.now() + LIMITS.COOLDOWN_MINUTES * 60000),
-      });
-
-      return res.status(403).json({
-        message: 'Too many attempts. Account locked for 15 minutes.',
-      });
-    }
-
-    await db.user.update(userId, {
-      pin_attempts: attempts,
-    });
-
-    return res.status(401).json({ message: 'Invalid PIN' });
-  }
-
-  // reset attempts
-  await db.user.update(userId, {
-    pin_attempts: 0,
-    cooldown_until: null,
-  });
-
-  // ─── 3. KYC CHECK ─────────────────────────────
-  if (!user.kyc_verified) {
-    return res.status(403).json({ message: 'Complete KYC first' });
-  }
-
-  // ─── 4. LIMIT CHECK ───────────────────────────
-  if (amount > LIMITS.MAX_PER_TRANSACTION) {
-    return res.status(400).json({
-      message: 'Exceeds per transaction limit',
-    });
-  }
-
-  if (user.daily_withdrawn + amount > LIMITS.DAILY_LIMIT) {
-    return res.status(400).json({
-      message: 'Daily withdrawal limit exceeded',
-    });
-  }
-
-  // ─── 5. FRAUD DETECTION ───────────────────────
-  const lastWithdraw = user.last_withdraw_at;
-
-  if (lastWithdraw && Date.now() - new Date(lastWithdraw).getTime() < 10000) {
-    return res.status(429).json({
-      message: 'Too many rapid withdrawals',
-    });
-  }
-
-  // ─── 6. DEFAULT BANK ─────────────────────────
-  const bank = await db.banks.findDefault(userId);
-
-  if (!bank) {
-    return res.status(400).json({ message: 'No default bank account' });
-  }
-
-  // ─── 7. BALANCE CHECK ─────────────────────────
-  if (user.balance < amount) {
-    return res.status(400).json({ message: 'Insufficient balance' });
-  }
-
-  // ─── 8. PROCESS TRANSFER ─────────────────────
-  const transfer = await paystack.transfer({
-    amount,
-    recipient: bank.recipient_code,
-  });
-
-  // ─── 9. UPDATE USER STATE ────────────────────
-  await db.user.update(userId, {
-    balance: user.balance - amount,
-    daily_withdrawn: user.daily_withdrawn + amount,
-    last_withdraw_at: new Date(),
-  });
-
-  // ─── 10. LOG TRANSACTION ─────────────────────
-  await db.transactions.insert({
-    user_id: userId,
-    type: 'withdrawal',
-    amount,
-    status: 'pending',
-  });
-
-  const deviceId = req.headers['x-device-id'];
-
-const device = await db.devices.find(userId, deviceId);
-
-let requireOTP = false;
-
-// 🚨 New device
-if (!device) {
-  requireOTP = true;
-}
-
-// 🚨 Large amount
-if (amount > 50000) {
-  requireOTP = true;
-}
-
-  return res.json({
-    success: true,
-    message: 'Withdrawal processing',
+router.post('/withdraw', (_req, res) => {
+  return res.status(503).json({
+    success: false,
+    message: 'Withdrawals are temporarily unavailable.',
   });
 });
 
-router.post('/verify-otp', authenticate, async (req, res) => {
+router.post(
+  '/verify-otp',
+  authenticate,
+  authorizeCustomerOrRoles('runner'),
+  async (req, res) => {
   const userId = req.user.id;
   const { code } = req.body;
 
@@ -644,6 +502,7 @@ router.post('/verify-otp', authenticate, async (req, res) => {
   await db.otp.update(otp.id, { used: true });
 
   return res.json({ success: true });
-});
+  }
+);
 
 export default router;

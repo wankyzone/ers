@@ -10,13 +10,18 @@ const { initSocket } = await import('../server/socket.js');
 
 const ERRAND_A = '00000000-0000-0000-0000-000000000401';
 const ERRAND_B = '00000000-0000-0000-0000-000000000402';
+const ERRAND_C = '00000000-0000-0000-0000-000000000403';
+const ERRAND_D = '00000000-0000-0000-0000-000000000404';
 
 const ACCESS_TOKENS = {
   client: 'client-access-token',
+  unverifiedClient: 'unverified-client-access-token',
   runner: 'runner-access-token',
+  unverifiedRunner: 'unverified-runner-access-token',
   other: 'other-access-token',
   clientB: 'client-b-access-token',
   runnerB: 'runner-b-access-token',
+  unsupported: 'unsupported-role-access-token',
 };
 
 const USERS = {
@@ -25,15 +30,28 @@ const USERS = {
     email: 'client@example.com',
     role: 'client',
   },
+  unverifiedClient: {
+    id: 'unverified-client-user-id',
+    email: 'unverified-client@example.com',
+    role: 'client',
+  },
   runner: {
     id: 'runner-user-id',
     email: 'runner@example.com',
     role: 'runner',
+    verified: true,
+  },
+  unverifiedRunner: {
+    id: 'unverified-runner-user-id',
+    email: 'unverified-runner@example.com',
+    role: 'runner',
+    verified: false,
   },
   other: {
     id: 'other-user-id',
     email: 'other@example.com',
     role: 'runner',
+    verified: true,
   },
   clientB: {
     id: 'client-b-user-id',
@@ -44,8 +62,21 @@ const USERS = {
     id: 'runner-b-user-id',
     email: 'runner-b@example.com',
     role: 'runner',
+    verified: true,
+  },
+  unsupported: {
+    id: 'unsupported-role-user-id',
+    email: 'unsupported@example.com',
+    role: 'customer_support',
   },
 };
+
+const runnerCapabilities = new Map([
+  [USERS.runner.id, true],
+  [USERS.unverifiedRunner.id, false],
+  [USERS.other.id, true],
+  [USERS.runnerB.id, true],
+]);
 
 const ERRANDS = {
   [ERRAND_A]: {
@@ -58,6 +89,16 @@ const ERRANDS = {
     client_id: USERS.clientB.id,
     assigned_runner_id: USERS.runnerB.id,
   },
+  [ERRAND_C]: {
+    id: ERRAND_C,
+    client_id: USERS.clientB.id,
+    assigned_runner_id: USERS.unverifiedRunner.id,
+  },
+  [ERRAND_D]: {
+    id: ERRAND_D,
+    client_id: USERS.runner.id,
+    assigned_runner_id: null,
+  },
 };
 
 const protect = {
@@ -65,18 +106,27 @@ const protect = {
     const entry = Object.entries(ACCESS_TOKENS).find(
       ([, token]) => token === accessToken
     );
+    const identity = entry?.[0];
 
     return {
       success: Boolean(entry),
-      user: { id: entry?.[0] },
+      user: {
+        id: USERS[identity]?.id,
+        email_confirmed_at:
+          identity === 'unverifiedClient' || identity === 'unverifiedRunner'
+            ? null
+            : '2026-01-01T00:00:00.000Z',
+      },
       message: 'Invalid or expired access token.',
     };
   },
   getApplicationUser: async (identity) => ({
-    success: Boolean(USERS[identity]),
-    user: USERS[identity],
+    success: Boolean(Object.values(USERS).find((user) => user.id === identity)),
+    user: Object.values(USERS).find((user) => user.id === identity),
     message: 'Application user not found.',
   }),
+  hasActiveRunnerCapability: async (identity) =>
+    runnerCapabilities.get(identity) === true,
 };
 
 const servers = new Set();
@@ -237,7 +287,10 @@ test('valid access token authenticates a socket with the trusted user', async ()
   });
   const serverSocket = io.sockets.sockets.get(client.id);
 
-  assert.deepEqual(serverSocket.user, USERS.client);
+  assert.deepEqual(serverSocket.user, {
+    ...USERS.client,
+    emailVerified: true,
+  });
 
   client.disconnect();
 });
@@ -271,6 +324,55 @@ test('missing access token is rejected', async () => {
     connectClient(url, {}),
     (error) => error.message === 'Authentication required.'
   );
+});
+
+test('unverified customer cannot establish an authenticated socket connection', async () => {
+  const { url } = await createSocketServer();
+
+  await assert.rejects(
+    connectClient(url, ACCESS_TOKENS.unverifiedClient),
+    (error) => error.message === 'Email verification is required.'
+  );
+});
+
+test('unsupported profile roles cannot establish customer socket access', async () => {
+  const { url } = await createSocketServer();
+
+  await assert.rejects(
+    connectClient(url, ACCESS_TOKENS.unsupported),
+    (error) => error.message === 'Unsupported account role.'
+  );
+});
+
+test('unverified runner cannot establish socket access', async () => {
+  const { url } = await createSocketServer();
+
+  await assert.rejects(
+    connectClient(url, ACCESS_TOKENS.unverifiedRunner),
+    (error) => error.message === 'Email verification is required.'
+  );
+});
+
+test('suspended runner retains customer errand access but loses assigned-runner access', async () => {
+  const { url } = await createSocketServer();
+  const runner = await connectClient(url, ACCESS_TOKENS.runner);
+  runnerCapabilities.set(USERS.runner.id, false);
+
+  const customerJoin = await new Promise((resolve) => {
+    runner.emit('join:errand', ERRAND_D, resolve);
+  });
+  assert.deepEqual(customerJoin, { success: true });
+
+  const assignedJoin = await new Promise((resolve) => {
+    runner.emit('join:errand', ERRAND_A, resolve);
+  });
+  assert.deepEqual(assignedJoin, {
+    success: false,
+    error: 'Not authorized for this errand.',
+  });
+
+  runner.disconnect();
+  runnerCapabilities.set(USERS.runner.id, true);
 });
 
 test('invalid access token is rejected', async () => {

@@ -2,11 +2,25 @@ import { Server } from 'socket.io';
 import {
   verifyAccessToken,
   getApplicationUser,
+  isEmailVerifiedAuthUser,
+  hasActiveRunnerCapability,
 } from '../modules/protect/index.js';
+
+const SUPPORTED_PROFILE_ROLES = new Set([
+  'client',
+  'runner',
+  'admin',
+  'super_admin',
+]);
+const EMAIL_VERIFIED_SOCKET_ROLES = new Set(['client', 'runner']);
 
 export function initSocket(
   server,
-  protect = { verifyAccessToken, getApplicationUser },
+  protect = {
+    verifyAccessToken,
+    getApplicationUser,
+    hasActiveRunnerCapability,
+  },
   socketAccess = {}
 ) {
   const io = new Server(server, {
@@ -49,7 +63,27 @@ export function initSocket(
         );
       }
 
-      socket.user = accountResult.user;
+      if (accountResult.user.id !== authResult.user.id) {
+        return next(new Error('Application user not found.'));
+      }
+
+      if (!SUPPORTED_PROFILE_ROLES.has(accountResult.user.role)) {
+        return next(new Error('Unsupported account role.'));
+      }
+
+      const emailVerified = isEmailVerifiedAuthUser(authResult.user);
+      if (
+        !emailVerified &&
+        EMAIL_VERIFIED_SOCKET_ROLES.has(accountResult.user.role)
+      ) {
+        return next(new Error('Email verification is required.'));
+      }
+
+      socket.user = {
+        ...accountResult.user,
+        id: authResult.user.id,
+        emailVerified,
+      };
 
       return next();
     } catch (_error) {
@@ -72,6 +106,16 @@ export function initSocket(
 
       try {
         if (typeof isUserAuthorizedForErrand === 'function') {
+          if (
+            socket.user.role === 'runner' &&
+            !(await isActiveRunner(socket.user))
+          ) {
+            return respond({
+              success: false,
+              error: 'Not authorized for this errand.',
+            });
+          }
+
           const authorized = await isUserAuthorizedForErrand(
             socket.user,
             errandId
@@ -93,8 +137,13 @@ export function initSocket(
             });
           }
 
-          const isClient = errand.client_id === socket.user.id;
+          const isClient =
+            ['client', 'runner'].includes(socket.user.role) &&
+            socket.user.emailVerified &&
+            errand.client_id === socket.user.id;
           const isAssignedRunner =
+            socket.user.role === 'runner' &&
+            (await isActiveRunner(socket.user)) &&
             errand.assigned_runner_id === socket.user.id;
 
           if (!isClient && !isAssignedRunner) {
@@ -164,7 +213,11 @@ export function initSocket(
           });
         }
 
-        if (errand.assigned_runner_id !== socket.user.id) {
+        if (
+          socket.user.role !== 'runner' ||
+          !(await isActiveRunner(socket.user)) ||
+          errand.assigned_runner_id !== socket.user.id
+        ) {
           return respond({
             success: false,
             error: 'Only the assigned runner can publish location.',
@@ -211,6 +264,16 @@ export function initSocket(
         });
       }
 
+      if (
+        ['client', 'runner'].includes(socket.user.role) &&
+        !socket.user.emailVerified
+      ) {
+        return respond({
+          success: false,
+          error: 'Email verification is required.',
+        });
+      }
+
       socket.join(`user:${socket.user.id}`);
 
       return respond({
@@ -222,6 +285,15 @@ export function initSocket(
       console.log('❌ Disconnected');
     });
   });
+
+  async function isActiveRunner(user) {
+    return (
+      user.role === 'runner' &&
+      user.emailVerified &&
+      user.verified === true &&
+      (await protect.hasActiveRunnerCapability(user.id))
+    );
+  }
 
   return io;
 }

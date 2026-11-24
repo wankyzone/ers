@@ -2,7 +2,10 @@ import express from 'express';
 import axios from 'axios';
 import crypto from 'crypto';
 import supabase from '../supabase.js';
-import { authenticate } from '../modules/protect/authenticate.js';
+import {
+  authenticate,
+  authorizeCustomerOrRoles,
+} from '../modules/protect/index.js';
 
 const router = express.Router();
 
@@ -60,14 +63,19 @@ router.post('/recipient', async (req, res) => {
   });
 });
 
-router.post('/initialize', authenticate, async (req, res) => {
+router.post(
+  '/initialize',
+  authenticate,
+  authorizeCustomerOrRoles('runner'),
+  async (req, res) => {
   const { amount } = req.body;
 
   if (!PAYSTACK_SECRET) {
     return res.status(500).json({
       success: false,
       message: 'Paystack is not configured',
-    });
+      }
+    );
   }
 
   const numericAmount = Number(amount);
@@ -190,14 +198,19 @@ router.post('/initialize', authenticate, async (req, res) => {
 /* ─────────────────────────────
    VERIFY PAYMENT
 ───────────────────────────── */
-router.get('/verify/:reference', authenticate, async (req, res) => {
+router.get(
+  '/verify/:reference',
+  authenticate,
+  authorizeCustomerOrRoles('runner'),
+  async (req, res) => {
   const reference = String(req.params.reference || '').trim();
 
   if (!reference) {
     return res.status(400).json({
       success: false,
       message: 'Payment reference is required',
-    });
+      }
+    );
   }
 
   if (!PAYSTACK_SECRET) {
@@ -509,57 +522,48 @@ router.post('/webhook', async (req, res) => {
        4. TRANSFER SUCCESS
     ============================================================ */
 
-    if (event.event === 'transfer.success') {
-      await supabase
-        .from('transactions')
-        .update({ status: 'completed' })
-        .eq('reference', event.data?.reference);
-
-      return res.json({
-        success: true,
-        message: 'Transfer processed',
-      });
-    }
-
-    /* ============================================================
-       5. TRANSFER FAILED
-    ============================================================ */
-
-    if (event.event === 'transfer.failed') {
+    if (
+      event.event === 'transfer.success' ||
+      event.event === 'transfer.failed'
+    ) {
       const reference = event.data?.reference;
+      const providerAmount = Number(event.data?.amount);
 
-      const { data: tx } = await supabase
-        .from('transactions')
-        .select('*')
-        .eq('reference', reference)
-        .single();
+      if (
+        typeof reference !== 'string' ||
+        !reference ||
+        !Number.isSafeInteger(providerAmount) ||
+        providerAmount <= 0
+      ) {
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid transfer payload',
+        });
+      }
 
-      if (tx) {
-        const { data: wallet } = await supabase
-          .from('wallets')
-          .select('*')
-          .eq('user_id', tx.user_id)
-          .single();
-
-        if (wallet) {
-          await supabase
-            .from('wallets')
-            .update({
-              available_balance:
-                Number(wallet.available_balance || 0) + Number(tx.amount || 0),
-            })
-            .eq('user_id', tx.user_id);
+      const { data, error } = await supabase.rpc(
+        'reconcile_paystack_transfer_atomic',
+        {
+          p_reference: reference,
+          p_event: event.event,
+          p_amount_minor: providerAmount,
         }
+      );
 
-        await supabase
-          .from('transactions')
-          .update({ status: 'failed' })
-          .eq('id', tx.id);
+      if (error || !data) {
+        console.error('Paystack transfer reconciliation failed:', error);
+        return res.status(500).json({
+          success: false,
+          message: 'Unable to reconcile transfer',
+        });
       }
 
       return res.json({
         success: true,
-        message: 'Transfer failure processed',
+        message:
+          event.event === 'transfer.success'
+            ? 'Transfer processed'
+            : 'Transfer failure processed',
       });
     }
 

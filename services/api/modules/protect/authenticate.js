@@ -1,6 +1,7 @@
 import {
   verifyAccessToken,
   getApplicationUser,
+  isEmailVerifiedAuthUser,
 } from "./authService.js";
 
 /**
@@ -55,6 +56,13 @@ export async function authenticate(req, res, next) {
       });
     }
 
+    if (accountResult.user.id !== authResult.user.id) {
+      return res.status(403).json({
+        success: false,
+        message: "Application user not found.",
+      });
+    }
+
     req.user = {
       id: authResult.user.id,
       email:
@@ -67,6 +75,7 @@ export async function authenticate(req, res, next) {
       pinSet: accountResult.user.pin_set,
       riskScore: accountResult.user.risk_score,
       verified: accountResult.user.verified,
+      emailVerified: isEmailVerifiedAuthUser(authResult.user),
     };
 
     return next();

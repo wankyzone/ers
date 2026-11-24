@@ -1,7 +1,7 @@
 import express from "express";
 import { submitKyc } from "../services/kycService.js";
 import { authenticate,
-         authorize,
+         authorizeRunnerApplication,
  } from "../modules/protect/index.js";
 
 const router = express.Router();
@@ -17,7 +17,7 @@ const router = express.Router();
 router.post(
   "/verify",
    authenticate,
-   authorize("runner"),
+  authorizeRunnerApplication(),
    async (req, res) => {
   try {
     const userId = req.user.id;
