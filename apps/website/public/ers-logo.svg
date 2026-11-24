@@ -1,0 +1,6 @@
+<svg width="224" height="64" viewBox="0 0 224 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect x="0" y="0" width="64" height="64" rx="18" fill="#19C963"/>
+  <path d="M20 18.5H45.5C49.6421 18.5 53 21.8579 53 26V27.5C53 31.6421 49.6421 35 45.5 35H20V18.5ZM20 35H45.5C49.6421 35 53 38.3579 53 42.5V44C53 48.1421 49.6421 51.5 45.5 51.5H20V35ZM14 14.5V49.5H25.5V14.5H14ZM14 14.5H35.5V18.5H14V14.5ZM14 35H35.5V39H14V35Z" fill="white"/>
+  <path d="M52.75 14.5H45.5V49.5H52.75C57.5304 49.5 61.5 45.5304 61.5 40.75V23.25C61.5 18.4696 57.5304 14.5 52.75 14.5Z" fill="rgba(255,255,255,0.18)"/>
+  <text x="75" y="41" fill="#101512" font-family="Arial, Helvetica, sans-serif" font-size="28" font-weight="700" letter-spacing="1">ERS</text>
+</svg>
