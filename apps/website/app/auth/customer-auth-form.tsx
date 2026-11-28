@@ -75,7 +75,7 @@ export default function CustomerAuthForm({
             email: normalizedEmail,
             password,
             fullName: fullName.trim(),
-            emailRedirectTo: `${window.location.origin}/auth/callback?next=/customer`,
+            emailRedirectTo: `${window.location.origin}/auth/callback`,
           },
         );
         const outcome = getSignupOutcome(
